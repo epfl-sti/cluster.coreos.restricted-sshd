@@ -1,0 +1,29 @@
+{
+  "name": "cluster.coreos.restricted-sshd",
+  "version": "0.1.0",
+  "description": " Restricted server for `fleetctl --tunnel`, with configurable access control ",
+  "main": "app.js",
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/epfl-sti/cluster.coreos.restricted-sshd.git"
+  },
+  "keywords": [
+    "sshd",
+    "coreos",
+    "fleetctl",
+    "fleet",
+    "multitenant"
+  ],
+  "author": "Dominique Quatravaux <dominique@quatravaux.org>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/epfl-sti/cluster.coreos.restricted-sshd/issues"
+  },
+  "homepage": "https://github.com/epfl-sti/cluster.coreos.restricted-sshd#readme",
+  "dependencies": {
+    "docoptmd": "^0.1.2"
+  }
+}

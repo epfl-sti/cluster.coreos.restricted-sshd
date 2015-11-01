@@ -1,6 +1,6 @@
 # `cluster.coreos.restricted-sshd`
 
-An ssh server in node.js that implements a multi-tenant policy for a
+An SSH server in node.js that implements a multi-tenant policy for a
 CoreOS cluster.
 
 The
@@ -24,3 +24,15 @@ provide proxy-as-a-service to tenants, but again, it will only do so
 in a way that doesn't break the access control policy (e.g. it will
 only be possible to run the SOCKS server from a Docker container that
 the tenant has access to through `fleetctl ssh`).
+
+## Usage
+```docopt
+
+Usage:
+  fleetctl-sshd [--port=<n>]
+  fleetctl-sshd --version
+
+Options:
+  --port=<n>            Port to serve on [default: 2222]
+  --version             Show this message
+```
