@@ -42,6 +42,8 @@ exports.startServer = function(port, opt_listenAddress, done) {
                     // the validity of the given public key
                     ctx.accept();
                 }
+            } else if (ctx.method === 'none') {
+                ctx.reject(["publickey"]);
             } else
                 ctx.reject();
         }).on('ready', function() {
