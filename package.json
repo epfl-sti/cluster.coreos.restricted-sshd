@@ -24,6 +24,11 @@
   },
   "homepage": "https://github.com/epfl-sti/cluster.coreos.restricted-sshd#readme",
   "dependencies": {
-    "docoptmd": "^0.1.2"
+    "buffer-equal-constant-time": "^1.0.1",
+    "docoptmd": "^0.1.2",
+    "ssh2": "^0.4.12"
+  },
+  "devDependencies": {
+    "mocha": "^2.3.3"
   }
 }
