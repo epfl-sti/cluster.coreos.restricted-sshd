@@ -43,6 +43,8 @@ exports.startServer = function(port, opt_listenAddress, done) {
                     ctx.accept();
                 }
             } else if (ctx.method === 'none') {
+                // Client wants list of authentication methods
+                // (RFC4525, § 5.2)
                 ctx.reject(["publickey"]);
             } else
                 ctx.reject();
