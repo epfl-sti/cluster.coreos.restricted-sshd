@@ -18,8 +18,9 @@ restricts access to jobs in a configurable way:
    + `fleetctl ssh` can only target a service, and forwards to a `root` shell inside the Docker container of the same name (as opposed to a “top-level” `core` shell).
 
 `cluster.coreos.restricted-sshd` is *not* a general-purpose SSH
-server. It doesn't forward agents. It may in the future obey the -D
-flag (SOCKS) to provide proxy-as-a-service to tenants, but again, it
-will only do so in a way that doesn't break the access control policy
-(e.g. it will only be possible to run the SOCKS server from a Docker
-container that the tenant has access to through `fleetctl ssh`).
+server. It doesn't run arbitrary shell commands. It doesn't forward
+agents or ports. It may in the future obey the -D flag (SOCKS) to
+provide proxy-as-a-service to tenants, but again, it will only do so
+in a way that doesn't break the access control policy (e.g. it will
+only be possible to run the SOCKS server from a Docker container that
+the tenant has access to through `fleetctl ssh`).
