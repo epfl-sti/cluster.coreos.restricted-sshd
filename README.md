@@ -20,6 +20,6 @@ restricts access to jobs in a configurable way:
 `cluster.coreos.restricted-sshd` is *not* a general-purpose SSH
 server. It doesn't forward agents. It may in the future obey the -D
 flag (SOCKS) to provide proxy-as-a-service to tenants, but again, it
-will do so in a controlled manner (e.g. it will only be possible to
-run the SOCKS server from a Docker container that the tenant has
-access to through `fleetctl ssh`).
+will only do so in a way that doesn't break the access control policy
+(e.g. it will only be possible to run the SOCKS server from a Docker
+container that the tenant has access to through `fleetctl ssh`).
