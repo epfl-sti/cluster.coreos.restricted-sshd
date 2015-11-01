@@ -18,8 +18,7 @@ var pubKey = utils.genPublicKey(utils.parseKey(fs.readFileSync('tmpkeys/user.pub
 server.findPolicyByPubkey = function (key) {
     if (key.algo === pubKey.fulltype
         && buffersEqual(key.data, pubKey.public)) {
-        var policy = new sshd.Policy("MAGIC PUBKEY");
-        policy.publicOrig = pubKey.publicOrig;  // OW OW OUCH BLEAAARGH
+        var policy = new sshd.Policy("tmpkeys/user.pub");
         return policy;
     }
 };

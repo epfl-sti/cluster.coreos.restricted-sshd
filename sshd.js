@@ -6,7 +6,8 @@ var assert = require('assert'),
     crypto = require('crypto'),
     inspect = require('util').inspect,
     debug = require('debug')('sshd'),
-    ssh2 = require('ssh2');
+    ssh2 = require('ssh2'),
+    utils = ssh2.utils;
 
 /**
  * A policy object.
@@ -27,6 +28,15 @@ var Policy = exports.Policy = function (id) {
     };
 };
 
+function asPemKey(contextKey) {
+    var matched = contextKey.algo.match("ssh-(...)");
+    if (! matched) {
+        throw new Error("Weird algo: " + contextKey.algo);
+    }
+    return utils.genPublicKey({type: matched[1],
+        public: contextKey.data}).publicOrig;
+}
+
 /**
  * Server class.
  *
@@ -46,27 +56,32 @@ var Server = exports.Server = function (options) {
 
         client.on('authentication', function (ctx) {
             if (ctx.method === 'publickey') {
-                if (! client.policy) {
+                var publicKey = asPemKey(ctx.key);
+                if (client.publicKey !== publicKey) {
                     client.policy = self.findPolicyByPubkey(ctx.key);
-                    if (! client.policy) {
+                    if (client.policy) {
+                        client.publicKey = publicKey;
+                    } else {
                         debug("Presented unacceptable key");
                         ctx.reject();
                         return;
                     }
+                    ;
                 }
                 if (! ctx.signature) {
                     // if no signature present, that means the client is just checking
                     // the validity of the given public key
+                    client.policy.debug("will accept this public key");
                     ctx.accept();
                 } else {
                     var verifier = crypto.createVerify(ctx.sigAlgo);
                     verifier.update(ctx.blob);
-                    if (verifier.verify(client.policy.publicOrig,
+                    if (verifier.verify(client.publicKey,
                             ctx.signature, 'binary')) {
                         client.policy.debug("Public key authentication successful");
                         ctx.accept();
                     } else {
-                        client.policy.debug("Failed pubkey authentication");
+                        client.policy.debug("Failed public key authentication");
                         ctx.reject();
                     }
                 }
@@ -78,7 +93,7 @@ var Server = exports.Server = function (options) {
                 ctx.reject();
         });
         client.on('ready', function () {
-            client.policy.debug('Client authenticated!');
+            client.policy.debug('Authentication complete!');
 
             client.on('session', function (accept, reject) {
                 client.policy.debug('Client requests a session');
