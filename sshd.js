@@ -2,12 +2,15 @@
  * sshd entry point, using based on https://github.com/mscdex/ssh2
  */
 
-var assert = require('assert'),
-    crypto = require('crypto'),
+var crypto = require('crypto'),
     inspect = require('util').inspect,
     debug = require('debug')('sshd'),
     ssh2 = require('ssh2'),
-    utils = ssh2.utils;
+    through2 = require('through2'),
+    utils = ssh2.utils,
+    http_on_pipe = require("./http_on_pipe"),
+    ResponseToStream = http_on_pipe.ResponseToStream,
+    SlurpHttpParser = http_on_pipe.SlurpHttpParser;
 
 /**
  * A policy object.
@@ -18,13 +21,56 @@ var assert = require('assert'),
  * @constructor
  */
 var Policy = exports.Policy = function (id) {
-    this.debug = function(msg) { debug(id + ": " + msg); };
+    var self = this;
+    self.debug = function(msg) { debug(id + ": " + msg); };
 
-    this.grantFleetSock = function (stream) {
-        stream.stderr.write('Oh no, the dreaded errors!\n');
-        stream.write('Just kidding about the errors!\n');
-        stream.exit(0);
-        stream.end();
+    self.handleFleetStream = function (stream) {
+        var parser = new SlurpHttpParser(stream.stdin);
+        parser.pipe(through2(function (slurpedReq, enc, callback) {
+                var req = parser.lastRequest;
+                    res = new ResponseToStream(req, stream.stdout,
+                        function (e) {
+                            if (! e) {
+                                debug("Consumed request " + req.url);
+                                callback();
+                            } else {
+                                debug("Write error responding to " + req.url + ": " + e);
+                                callback(e);
+                            }
+                        });
+                self.fleetConnect.handle(req, res);
+            }));
+        stream.stdin.on("close", function () {
+            stream.exit(0);
+            stream.end();
+        });
+    };
+
+    /**
+     * The connect or express object to handle the requests to fleetd.
+     *
+     * The default instance is 404-compliant. You probably want to replace it.
+     *
+     * @type {{handle: Function}}
+     */
+    self.fleetConnect = {handle: function (req, res) {
+        debug("Hit default fleetd handler - Override me in your code");
+        res.writeHead(404, {"Content-Type": "text/plain"});
+        res.write("No handler is set for requests to " +
+            "the restricted fleetd UNIX domain socket");
+        res.end();
+    }};
+
+    /**
+     * Serve an intercepted request to fleet.sock
+     *
+     * @param req
+     * @param res
+     * @param done
+     */
+    self.serveFleetRequest = function (req, res, done) {
+        res.json({});
+        done();
     };
 };
 
@@ -66,7 +112,6 @@ var Server = exports.Server = function (options) {
                         ctx.reject();
                         return;
                     }
-                    ;
                 }
                 if (! ctx.signature) {
                     // if no signature present, that means the client is just checking
@@ -106,7 +151,7 @@ var Server = exports.Server = function (options) {
                         info.command.indexOf("fleet.sock") > -1) {
                         client.policy.debug("Routing to restricted fleet.sock");
                         var stream = accept();
-                        client.policy.grantFleetSock(stream);
+                        client.policy.handleFleetStream(stream);
                     } else {
                         client.policy.debug("Unhandled command: " +
                             inspect(info.command));

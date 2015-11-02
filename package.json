@@ -27,7 +27,11 @@
     "buffer-equal-constant-time": "^1.0.1",
     "debug": "^2.2.0",
     "docoptmd": "^0.1.2",
-    "ssh2": "^0.4.12"
+    "express": "^4.13.3",
+    "express-json": "^1.0.0",
+    "readable-stream": "^2.0.4",
+    "ssh2": "^0.4.12",
+    "through2": "^2.0.0"
   },
   "devDependencies": {
     "mocha": "^2.3.3"
