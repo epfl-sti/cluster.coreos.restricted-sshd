@@ -6,11 +6,8 @@ var crypto = require('crypto'),
     inspect = require('util').inspect,
     debug = require('debug')('sshd'),
     ssh2 = require('ssh2'),
-    through2 = require('through2'),
     utils = ssh2.utils,
-    http_on_pipe = require("./http_on_pipe"),
-    ResponseToStream = http_on_pipe.ResponseToStream,
-    HTTPParserTransform = http_on_pipe.HTTPParserTransform;
+    http_on_pipe = require("./http_on_pipe");
 
 /**
  * A policy object.
@@ -25,21 +22,8 @@ var Policy = exports.Policy = function (id) {
     self.debug = function(msg) { debug(id + ": " + msg); };
 
     self.handleFleetStream = function (stream) {
-        stream.stdin.pipe(new HTTPParserTransform())
-            .pipe(through2.obj(
-                function (req, enc, consumed) {
-                    var res = new ResponseToStream(req, stream.stdout,
-                        function (e) {
-                            if (! e) {
-                                debug("Consumed request " + req.url);
-                                consumed();
-                            } else {
-                                debug("Write error responding to " + req.url + ": " + e);
-                                consumed(e);
-                            }
-                        });
-                    self.fleetConnect.handle(req, res);
-                }));
+        http_on_pipe(stream.stdin, stream.stdout,
+            self.fleetConnect.handle.bind(self.fleetConnect));
         stream.stdin.on("close", function () {
             stream.exit(0);
             stream.end();

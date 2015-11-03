@@ -4,6 +4,7 @@
 
 var assert = require("assert"),
     util = require('util'),
+    through2 = require('through2'),
     EventEmitter = require('events').EventEmitter,
     Transform = require('stream').Transform,
 // Using node's private API here – This saves us so much work that
@@ -13,11 +14,45 @@ var assert = require("assert"),
     debug = require("debug")("http_on_pipe");
 
 /**
+ * Main entry point.
+ * @param stdin
+ * @param stdout
+ * @param {handler} handler function, HTTP-style
+ *                  (takes req and res, eventually calls res.end())
+ */
+module.exports = function (stdin, stdout, handler) {
+    stdin.pipe(new HTTPParserTransform())
+        .pipe(through2.obj(
+            function (req, enc, consumed) {
+                var res = new ResponseToStream(req, stdout,
+                    function (e) {
+                        if (! e) {
+                            debug("Consumed request " + req.url);
+                            consumed();
+                        } else {
+                            debug("Write error responding to " + req.url + ": " + e);
+                            consumed(e);
+                        }
+                    });
+                handler(req, res);
+            }));
+};
+
+/**
+ * Handler function to serve with.
+ * @callback handler
+ * @param {req} A request object
+ * @param {res} A response object
+ */
+
+/**
  * Harness node.js' private HTTP parser into working with Buffers.
+ *
+ * Exported for tests.
  *
  * @constructor
  */
-var HTTPParser = exports.HTTPParser = function () {
+var HTTPParser = module.exports.HTTPParser = function () {
     var self = this;
     var fakeServer = {
         timeout: false,
@@ -58,7 +93,7 @@ util.inherits(HTTPParser, EventEmitter);
  *
  * @constructor
  */
-var HTTPParserTransform = exports.HTTPParserTransform = function () {
+var HTTPParserTransform = function () {
     var self = this;
     Transform.call(self, { objectMode: true });
 
@@ -87,7 +122,7 @@ util.inherits(HTTPParserTransform, Transform);
  * @param done Called after .end() returns
  * @constructor
  */
-var ResponseToStream = exports.ResponseToStream = function (req, outStream, done) {
+var ResponseToStream = function (req, outStream, done) {
     var self = this;
     ServerResponse.call(self, req);
     self.connection = {
