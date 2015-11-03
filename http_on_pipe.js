@@ -125,17 +125,25 @@ util.inherits(HTTPParserTransform, Transform);
 var ResponseToStream = function (req, outStream, done) {
     var self = this;
     ServerResponse.call(self, req);
+    var brokenPipe;
+    outStream.on("error", function (err) {
+        console.trace(err);
+        brokenPipe = err;
+    });
     self.connection = {
+        // Mock out as many access
         writable: true,
         _httpMessage: self,
         write: function(d, encoding, callback) {
+            if (brokenPipe) {
+                debug("Dropping " + d.length + " bytes after write error");
+                return;
+            }
             debug("Sending response: " + d);
             outStream.write(d, encoding, callback);
         },
-        // We don't care about throttling the read side; things don't
-        // work that way here.
-        cork: function () {},
-        uncork: function () {}
+        cork: function () {outStream.cork()},
+        uncork: function () {outStream.uncork()}
     };
     self.on("finish", function () {
         done();
