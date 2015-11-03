@@ -2,7 +2,8 @@ var fs = require('fs'),
     docoptmd = require('docoptmd'),
     express = require('express'),
     express_json = require('express-json'),
-    debug = require("debug")("restricted-sshd");
+    debug = require("debug")("restricted-sshd"),
+    keys = require("./keys"),
     sshd = require('./sshd');
 
 var argv = process.argv.slice(process.argv[0].endsWith("/node") ? 2 : 1);
@@ -16,11 +17,10 @@ var server = new sshd.Server({
 var buffersEqual = require('buffer-equal-constant-time'),
     ssh2 = require('ssh2'),
     utils = ssh2.utils;
-var pubKey = utils.genPublicKey(utils.parseKey(fs.readFileSync('tmpkeys/user.pub')));
+var hasAccess = new keys.UserPublicKey(fs.readFileSync('tmpkeys/user.pub'));
 
 server.findPolicyByPubkey = function (pubkey) {
-    if (pubkey.algo === pubKey.fulltype
-        && buffersEqual(pubkey.data, pubKey.public)) {
+    if (hasAccess.equals(pubkey)) {
         var policy = new sshd.Policy("tmpkeys/user.pub");
         policy.fleetConnect = express();
         // policy.fleetConnect.use(express_json);
