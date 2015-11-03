@@ -28,9 +28,10 @@ var SlurpHttpParser = exports.SlurpHttpParser = function (inStream) {
     };
     var fakeSocket = {
         _handle: {},
-        addListener: self.addListener.bind(self),
-        removeListener: self.removeListener.bind(self),
-        on: inStream.on.bind(inStream),
+        addListener: self.addListener.bind(self),  // TODO: should be inStream?
+        removeListener: self.removeListener.bind(self),  // TODO: should be inStream?
+        on: inStream.on.bind(inStream)
+        // TODO: add destroy() and more
     };
     connectionListener.call(fakeServer, fakeSocket);
     fakeSocket.parser.onIncoming = function (req, shouldKeepAlive) {

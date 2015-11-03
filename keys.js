@@ -40,3 +40,4 @@ UserPublicKey.prototype.equals = function (cmp) {
             && buffersEqual(cmp.data, this.getPublicString()));
     }
 };
+

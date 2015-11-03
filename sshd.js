@@ -95,7 +95,7 @@ function asPemKey(contextKey) {
 var Server = exports.Server = function (options) {
     var self = this;
 
-    server = new ssh2.Server({
+    var server = new ssh2.Server({
         privateKey: options.privateKey
     }, function (client) {
         debug('New client connection');
@@ -186,6 +186,7 @@ var Server = exports.Server = function (options) {
     });
 
     self.listen = server.listen.bind(server);
+    self.address = server.address.bind(server);
 
     /**
      * Overridable method: find a policy for a given public key
