@@ -46,8 +46,3 @@ server.listen({port: sshdPort},
     function() {
         console.log("Running on port " + this.address().port);
     });
-
-var express = require('express');
-var app = express();
-
-app.listen(3000);
