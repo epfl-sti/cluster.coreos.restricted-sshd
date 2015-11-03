@@ -2,6 +2,7 @@
 var assert = require("assert"),
     which = require("which"),
     express = require('express'),
+    express_json = require('express-json'),
     debug = require("debug")("tests/sshd.js"),
     keys = require("../../keys"),
     sshd = require("../../sshd"),
@@ -31,13 +32,12 @@ describe('sshd end-to-end test', function () {
             if (! hasAccess.equals(pubkey)) return;
             var policy = new sshd.Policy("test pubkey");
             policy.fleetConnect = express();
-            // policy.fleetConnect.use(express_json);
+            policy.fleetConnect.use(express_json());
             policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
-                var responseData = {"machines":
-                    [{"id":"08160786f7c24ee495fca0b56301397a","metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},"primaryIP":"192.168.11.3"}]};
-                res.setHeader("Content-Type", "application/json");
-                res.write(JSON.stringify(responseData));
-                res.end();
+                res.json({"machines":
+                    [{"id":"08160786f7c24ee495fca0b56301397a",
+                        "metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},
+                        "primaryIP":"192.168.11.3"}]});
             });
             return policy;
         };
