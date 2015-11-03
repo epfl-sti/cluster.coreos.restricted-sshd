@@ -10,7 +10,7 @@ var crypto = require('crypto'),
     utils = ssh2.utils,
     http_on_pipe = require("./http_on_pipe"),
     ResponseToStream = http_on_pipe.ResponseToStream,
-    SlurpHttpParser = http_on_pipe.SlurpHttpParser;
+    HTTPParserTransform = http_on_pipe.HTTPParserTransform;
 
 /**
  * A policy object.
@@ -25,21 +25,21 @@ var Policy = exports.Policy = function (id) {
     self.debug = function(msg) { debug(id + ": " + msg); };
 
     self.handleFleetStream = function (stream) {
-        var parser = new SlurpHttpParser(stream.stdin);
-        parser.pipe(through2(function (slurpedReq, enc, callback) {
-                var req = parser.lastRequest;
-                    res = new ResponseToStream(req, stream.stdout,
+        stream.stdin.pipe(new HTTPParserTransform())
+            .pipe(through2.obj(
+                function (req, enc, consumed) {
+                    var res = new ResponseToStream(req, stream.stdout,
                         function (e) {
                             if (! e) {
                                 debug("Consumed request " + req.url);
-                                callback();
+                                consumed();
                             } else {
                                 debug("Write error responding to " + req.url + ": " + e);
-                                callback(e);
+                                consumed(e);
                             }
                         });
-                self.fleetConnect.handle(req, res);
-            }));
+                    self.fleetConnect.handle(req, res);
+                }));
         stream.stdin.on("close", function () {
             stream.exit(0);
             stream.end();

@@ -2,8 +2,10 @@
  * Doing HTTP on a pipe (as opposed to a server socket).
  */
 
-var util = require('util'),
-    Readable = require('readable-stream/readable'),
+var assert = require("assert"),
+    util = require('util'),
+    EventEmitter = require('events').EventEmitter,
+    Transform = require('stream').Transform,
 // Using node's private API here – This saves us so much work that
     // I'm not even ashamed.
     connectionListener = require('_http_server')._connectionListener,
@@ -11,42 +13,71 @@ var util = require('util'),
     debug = require("debug")("http_on_pipe");
 
 /**
- * A transforming stream that parses HTTP requests on a pipe.
+ * Harness node.js' private HTTP parser into working with Buffers.
  *
  * @constructor
  */
-var SlurpHttpParser = exports.SlurpHttpParser = function (inStream) {
+var HTTPParser = exports.HTTPParser = function () {
     var self = this;
-    Readable.call(self);
-
     var fakeServer = {
         timeout: false,
-        httpAllowHalfOpen: false,
-        emit: function(event /*, args */) {
-            debug("Wanna say something?");
-        }
+        httpAllowHalfOpen: false
     };
+    var fakeSocketEvents = {};
     var fakeSocket = {
         _handle: {},
-        addListener: self.addListener.bind(self),  // TODO: should be inStream?
-        removeListener: self.removeListener.bind(self),  // TODO: should be inStream?
-        on: inStream.on.bind(inStream)
+        addListener: function() {},
+        removeListener: function() {},
+        on: function(event, cb) {
+            if (! (event in {data: 1, end: 1})) { return; }
+            debug("fakeSocket.on(\"" + event + "\", ...)");
+            fakeSocketEvents[event] = cb;
+        }
         // TODO: add destroy() and more
     };
+
     connectionListener.call(fakeServer, fakeSocket);
-    fakeSocket.parser.onIncoming = function (req, shouldKeepAlive) {
-        debug("incoming request: " + req.url);
-        // Readable, unlike Transform, type-checks what is .push()ed
-        // But we don't have to play nice:
-        self.lastRequest = req;
-        self.push(" ");
+    assert(fakeSocketEvents.data);
+    this.write = function (buf) {
+        assert(buf instanceof Buffer);
+        return fakeSocketEvents.data(buf);
+    };
+    assert(fakeSocketEvents.end);
+    this.end = function() {
+        fakeSocketEvents.end();
     };
 
-    self._read = function(ignored_bytes) {
-        debug("reading from pipe stream");
+    fakeSocket.parser.onIncoming = function (req) {
+        self.emit("request", req);
     };
 };
-util.inherits(SlurpHttpParser, Readable);
+util.inherits(HTTPParser, EventEmitter);
+
+/**
+ * A transforming stream that produces HTTP requests from a byte stream.
+ *
+ * @constructor
+ */
+var HTTPParserTransform = exports.HTTPParserTransform = function () {
+    var self = this;
+    Transform.call(self, { objectMode: true });
+
+    var parser = new HTTPParser();
+    parser.on("request", function (req) {
+        debug("incoming request: " + req.url);
+        self.push(req);
+    });
+    this._transform = function (chunk, encoding, callback) {
+        parser.write(chunk);
+        callback();
+    };
+
+    this._flush = function (callback) {
+        parser.end();
+        callback();
+    };
+};
+util.inherits(HTTPParserTransform, Transform);
 
 /**
  * An http.ServerResponse work-alike that writes to a pipe stream.

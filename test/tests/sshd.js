@@ -10,6 +10,8 @@ var assert = require("assert"),
     command = require("../shell-command"),
     Agent = require("../ssh-agent").Agent;
 
+require("../thenMochaDone");
+
 var fleetctl;
 try {
     fleetctl = which.sync("fleetctl");
