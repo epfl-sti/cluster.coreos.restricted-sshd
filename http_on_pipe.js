@@ -32,8 +32,8 @@ var HTTPParser = exports.HTTPParser = function () {
             if (! (event in {data: 1, end: 1})) { return; }
             debug("fakeSocket.on(\"" + event + "\", ...)");
             fakeSocketEvents[event] = cb;
-        }
-        // TODO: add destroy() and more
+        },
+        destroy: function () {}
     };
 
     connectionListener.call(fakeServer, fakeSocket);
@@ -96,8 +96,11 @@ var ResponseToStream = exports.ResponseToStream = function (req, outStream, done
         write: function(d, encoding, callback) {
             debug("Sending response: " + d);
             outStream.write(d, encoding, callback);
-            // process.nextTick(callback.bind({}));
-        }
+        },
+        // We don't care about throttling the read side; things don't
+        // work that way here.
+        cork: function () {},
+        uncork: function () {}
     };
     self.on("finish", function () {
         done();

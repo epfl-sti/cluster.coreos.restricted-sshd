@@ -102,7 +102,7 @@ describe("HTTPParser", function () {
             "Host: zoinx.org\r\n\r\n");
         parser.end();
     });
-    xit("deals with parse errors", function () {
+    it("deals with parse errors", function () {
         var parser = new HTTPParser();
         writeStringToParser(parser, "GET\r\n" +
             "Host: zoinx.org\r\n\r\n");
