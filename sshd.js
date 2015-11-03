@@ -23,7 +23,9 @@ var Policy = exports.Policy = function (id) {
 
     self.handleFleetStream = function (stream) {
         http_on_pipe(stream.stdin, stream.stdout,
-            self.fleetConnect.handle.bind(self.fleetConnect));
+            function(req, res) {
+                self.fleetConnect(req, res);
+            });
         stream.stdin.on("close", function () {
             stream.exit(0);
             stream.end();
@@ -31,19 +33,19 @@ var Policy = exports.Policy = function (id) {
     };
 
     /**
-     * The connect or express object to handle the requests to fleetd.
+     * The connect or express app to handle the requests to fleetd.
      *
      * The default instance is 404-compliant. You probably want to replace it.
      *
-     * @type {{handle: Function}}
+     * @type {Function}
      */
-    self.fleetConnect = {handle: function (req, res) {
+    self.fleetConnect = function (req, res) {
         debug("Hit default fleetd handler - Override me in your code");
         res.writeHead(404, {"Content-Type": "text/plain"});
         res.write("No handler is set for requests to " +
             "the restricted fleetd UNIX domain socket");
         res.end();
-    }};
+    };
 
     /**
      * Serve an intercepted request to fleet.sock
