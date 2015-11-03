@@ -30,7 +30,6 @@
     "express": "^4.13.3",
     "express-json": "^1.0.0",
     "merge": "^1.2.0",
-    "readable-stream": "^2.0.4",
     "ssh2": "^0.4.12",
     "through2": "^2.0.0"
   },
