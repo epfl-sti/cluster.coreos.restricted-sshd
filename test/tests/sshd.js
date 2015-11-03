@@ -25,14 +25,14 @@ describe('sshd end-to-end test', function () {
     it("runs fleetctl list-machines", function (done) {
         var fakeUserKey = new testKeys.UserKey();
         var hasAccess = new keys.UserPublicKey(fakeUserKey.publicAsSshString());
-        server.server.findPolicyByPubkey = function (pubkey) {
+        server.server.findPolicy = function (pubkey) {
             if (! hasAccess.equals(pubkey)) return;
             var policy = new sshd.Policy("test pubkey");
             policy.fleetConnect = express();
             // policy.fleetConnect.use(express_json);
             policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
-                var responseData = {"machines":[{"id":"08160786f7c24ee495fca0b56301397a","metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},"primaryIP":"192.168.11.3"}]};
-                // res.json(responseData);
+                var responseData = {"machines":
+                    [{"id":"08160786f7c24ee495fca0b56301397a","metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},"primaryIP":"192.168.11.3"}]};
                 res.setHeader("Content-Type", "application/json");
                 res.write(JSON.stringify(responseData));
                 res.end();
