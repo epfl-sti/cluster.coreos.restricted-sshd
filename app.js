@@ -19,13 +19,13 @@ var buffersEqual = require('buffer-equal-constant-time'),
     utils = ssh2.utils;
 var hasAccess = new keys.UserPublicKey(fs.readFileSync(process.env.HOME + '/.ssh/id_rsa.pub'));
 
-server.findPolicy = function (pubkey) {
+server.findPolicy = function (username, pubkey) {
     // TODO: improve - One ACL of SSH keys per tenant.
     // (The tenant name is the --ssh-username passed to fleetctl; not sure
     // how to fetch that from ssh2 API, must be passed to findPolicy)
     if (! hasAccess.equals(pubkey)) return;
 
-    var policy = new sshd.Policy("user's id_rsa.pub");
+    var policy = new sshd.Policy(username + "'s id_rsa.pub");
     policy.fleetConnect = express();
     policy.fleetConnect.use(express_json());
     policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
@@ -33,7 +33,7 @@ server.findPolicy = function (pubkey) {
         res.json(responseData);
     });
     policy.fleetConnect.get("/fleet/v1/units/:unit", function (req, res, next) {
-        var unit = req.params.username;
+        var unit = req.params.unit;
         debug("/fleet/v1/units/" + unit);
 
         var responseData = {"currentState":"launched","desiredState":"launched","machineID":"1cc5e2d0164446f48535cd3664d71350","name":"stiitops.prometheus.service","options":[{"name":"Description","section":"Unit","value":"Prometheus service"},{"name":"After","section":"Unit","value":"docker.service"},{"name":"Requires","section":"Unit","value":"docker.service"},{"name":"ExecStartPre","section":"Service","value":"/bin/sh -c 'docker rm -f %n 2\u003e/dev/null || true'"},{"name":"ExecStartPre","section":"Service","value":"/usr/bin/docker pull docker-registry.ne.cloud.epfl.ch:5000/cluster.coreos.prometheus"},{"name":"ExecStart","section":"Service","value":"/bin/sh -c 'docker run --name %n -p 9090:9090 docker-registry.ne.cloud.epfl.ch:5000/cluster.coreos.prometheus'"},{"name":"ExecStop","section":"Service","value":"/usr/bin/docker rm -f %n"},{"name":"RestartSec","section":"Service","value":"5s"},{"name":"Restart","section":"Service","value":"always"}]};

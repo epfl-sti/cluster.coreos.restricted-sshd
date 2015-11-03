@@ -90,7 +90,7 @@ var Server = exports.Server = function (options) {
             if (ctx.method === 'publickey') {
                 var publicKey = asPemKey(ctx.key);
                 if (client.publicKey !== publicKey) {
-                    client.policy = self.findPolicy(ctx.key);
+                    client.policy = self.findPolicy(ctx.username, ctx.key);
                     if (client.policy) {
                         client.publicKey = publicKey;
                     } else {

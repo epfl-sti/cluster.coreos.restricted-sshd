@@ -28,7 +28,7 @@ describe('sshd end-to-end test', function () {
     it("runs fleetctl list-machines", function (done) {
         var fakeUserKey = new testKeys.UserKey();
         var hasAccess = new keys.UserPublicKey(fakeUserKey.publicAsSshString());
-        server.server.findPolicy = function (pubkey) {
+        server.server.findPolicy = function (username, pubkey) {
             if (! hasAccess.equals(pubkey)) return;
             var policy = new sshd.Policy("test pubkey");
             policy.fleetConnect = express();
