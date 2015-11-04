@@ -136,10 +136,11 @@ var ResponseToStream = function (req, outStream, done) {
         write: function(d, encoding, callback) {
             if (brokenPipe) {
                 debug("Dropping " + d.length + " bytes after write error");
-                return;
+                callback(brokenPipe);
+            } else {
+                debug("Sending response: " + d);
+                outStream.write(d, encoding, callback);
             }
-            debug("Sending response: " + d);
-            outStream.write(d, encoding, callback);
         },
         cork: function () {outStream.cork()},
         uncork: function () {outStream.uncork()}
