@@ -12,8 +12,8 @@ var crypto = require('crypto'),
 /**
  * A policy object.
  *
- * Methods decide what happens in various circumstances; they should be
- * overridden.
+ * Methods decide what happens in various circumstances; a number of them
+ * are meant to be overridden.
  *
  * @constructor
  */
@@ -147,7 +147,7 @@ var Server = exports.Server = function (options) {
             });
         });
         client.on('tcpip', function (accept, reject, info) {
-            client.policy.debug('Client wants to forward TCP');
+            client.policy.debug('Client wants to forward TCP ' + inspect(info));
             reject();
         });
         client.on('openssh.streamlocal', function (accept, reject, info) {
