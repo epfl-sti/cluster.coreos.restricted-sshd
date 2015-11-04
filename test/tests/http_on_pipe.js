@@ -119,6 +119,17 @@ describe("HTTPParser", function () {
     });
 });
 
+function checkThenDone(checks, done) {
+    return function() {
+        try {
+            checks.apply(this, Array.prototype.slice.apply(arguments));
+            done();
+        } catch (e) {
+            done(e);
+        }
+    };
+}
+
 describe("http_on_pipe", function () {
     function makeStringSource(readBuf) {
         var source = new Readable();
@@ -151,22 +162,25 @@ describe("http_on_pipe", function () {
         var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
             "Host: zoinx.org\r\n\r\n");
         var sink = makeStringSink();
-        http_on_pipe(src, sink, bogoServe, function (err) {
-            try {
+        http_on_pipe(src, sink, bogoServe,
+            checkThenDone(function (err) {
                 assert.equal(err, undefined);
                 assert(sink.buf.toString().match("This is a GET on /zoinx"));
-                done();
-            } catch (e) {
-                done(e);
-            }
-        })
+            }, done));
     });
     it("deals with parse errors");
     it("deals with EPIPE", function (done) {
-        var brokenPipe = new Writable();
-        brokenPipe._write = function (chunk, encoding, callback) {
+        var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        var brokenSink = new Writable();
+        brokenSink._write = function (chunk, encoding, callback) {
+            debug("Ehh, no piping");
             callback(new Error("EPIPE"));
-        }
+        };
+        http_on_pipe(src, brokenSink, bogoServe,
+            checkThenDone(function (err) {
+                assert.equal(err.message, "EPIPE");
+            }, done));
     });
     it("deals with errors thrown in the handler");
 });

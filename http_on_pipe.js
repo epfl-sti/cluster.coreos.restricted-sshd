@@ -22,14 +22,11 @@ var assert = require("assert"),
  * @param {Function} done Called when it's time to close shop
  */
 module.exports = function (stdin, stdout, handler, done) {
-    var closed = false;
-    var closing = function(error) {
-        if (closed) return;
-        debug("closing, error = " + error);
-        closed = true;
-        done(error);
-    };
-
+    function callDone(arg) {
+        if (! done) return;
+        done(arg);
+        done = undefined;
+    }
     var httpTransform = new HTTPParserTransform();
     var requestSink = new Writable({ objectMode: true });
     requestSink._write = function (req, unused_enc, consumed) {
@@ -40,7 +37,7 @@ module.exports = function (stdin, stdout, handler, done) {
                     consumed();
                 } else {
                     debug("Write error responding to " + req.url + ": " + e);
-                    closing(e);
+                    callDone(e);
                     consumed(e);
                 }
             });
@@ -48,8 +45,7 @@ module.exports = function (stdin, stdout, handler, done) {
     };
     stdin.pipe(httpTransform)
         .pipe(requestSink);
-    requestSink.on("finish", closing);
-    stdout.on("end", closing);
+    requestSink.on("finish", function() { callDone(); });
 };
 
 /**
@@ -160,6 +156,8 @@ var ResponseToStream = function (req, outStream, done) {
     outStream.on("error", function (err) {
         console.trace(err);
         brokenPipe = err;
+        if (done) { done(err); }
+        done = undefined;
     });
     self.connection = {
         writable: true,
@@ -177,10 +175,12 @@ var ResponseToStream = function (req, outStream, done) {
         uncork: function () {outStream.uncork()}
     };
     self.on("finish", function () {
-        done();
+        if (done) { done(); }
+        done = undefined;
     });
     self.on("error", function (error) {
-        done(error);
+        if (done) { done(error); }
+        done = undefined;
     });
 };
 

@@ -21,7 +21,6 @@ var Policy = exports.Policy = function (id) {
     var self = this;
     self.debug = function(msg) { debug(id + ": " + msg); };
 
-
     self.handleFleetStream = function (stream) {
         var closed;
         function close(error) {
@@ -32,9 +31,8 @@ var Policy = exports.Policy = function (id) {
         stream.on("close", close);
 
         http_on_pipe(stream.stdin, stream.stdout,
-            function(req, res) {
-                self.fleetConnect(req, res);
-            }, close);
+            function(req, res) { self.fleetConnect(req, res); },
+            close);
     };
 
     /**
