@@ -28,6 +28,7 @@ module.exports = function (stdin, stdout, handler, done) {
         done = undefined;
     }
     var httpTransform = new HTTPParserTransform();
+    httpTransform.on("error", callDone);
     var requestSink = new Writable({ objectMode: true });
     requestSink._write = function (req, unused_enc, consumed) {
         var res = new ResponseToStream(req, stdout,
@@ -135,7 +136,8 @@ var HTTPParserTransform = function () {
 
     this._flush = function (callback) {
         parser.end();
-        debug("HTTPParserTransform closing down, error: " + error);
+        debug("HTTPParserTransform closing down" +
+            (error ? " for cause of " + error : ""));
         callback(error);
     };
 };

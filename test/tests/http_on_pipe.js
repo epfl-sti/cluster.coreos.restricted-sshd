@@ -185,7 +185,15 @@ describe("http_on_pipe", function () {
                     /This is a POST on \/zoinx[\s\S]*This is a GET on \/zoinx/));
             }, done));
     });
-    it("deals with parse errors");
+    it("deals with parse errors", function (done) {
+        var src = makeStringSource("GET\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        var sink = makeStringSink();
+        http_on_pipe(src, sink, bogoServe,
+            checkThenDone(function (err) {
+                assert.equal(err.message, "Parse Error");
+            }, done));
+    });
     it("deals with EPIPE", function (done) {
         var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
             "Host: zoinx.org\r\n\r\n");
