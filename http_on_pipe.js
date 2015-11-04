@@ -17,7 +17,7 @@ var assert = require("assert"),
  * Main entry point.
  * @param stdin
  * @param stdout
- * @param {handler} handler function, HTTP-style
+ * @param {handler} handler Handler function, HTTP-style
  *                  (takes req and res, eventually calls res.end())
  */
 module.exports = function (stdin, stdout, handler) {
