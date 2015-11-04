@@ -4,7 +4,6 @@
 
 var assert = require("assert"),
     util = require('util'),
-    through2 = require('through2'),
     EventEmitter = require('events').EventEmitter,
     Transform = require('stream').Transform,
     Writable = require('stream').Writable,
