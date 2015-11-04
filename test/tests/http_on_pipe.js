@@ -207,5 +207,16 @@ describe("http_on_pipe", function () {
                 assert.equal(err.message, "EPIPE");
             }, done));
     });
-    it("deals with errors thrown in the handler");
+    it("deals with errors thrown in the handler", function (done) {
+        function buggyServe(req, res) {
+            throw new Error("OOPS");
+        }
+        var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        var sink = makeStringSink();
+        http_on_pipe(src, sink, buggyServe,
+            checkThenDone(function (err) {
+                assert.equal(err.message, "OOPS");
+            }, done));
+    });
 });

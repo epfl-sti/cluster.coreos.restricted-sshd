@@ -27,8 +27,10 @@ module.exports = function (stdin, stdout, handler, done) {
         done(arg);
         done = undefined;
     }
+
     var httpTransform = new HTTPParserTransform();
     httpTransform.on("error", callDone);
+
     var requestSink = new Writable({ objectMode: true });
     requestSink._write = function (req, unused_enc, consumed) {
         var res = new ResponseToStream(req, stdout,
@@ -44,8 +46,11 @@ module.exports = function (stdin, stdout, handler, done) {
             });
         handler(req, res);
     };
+    requestSink.on("error", callDone);
+
     stdin.pipe(httpTransform)
         .pipe(requestSink);
+
     requestSink.on("finish", function() { callDone(); });
 };
 
@@ -125,8 +130,14 @@ var HTTPParserTransform = function () {
     });
     this._transform = function (chunk, encoding, callback) {
         if (! error) {
-            parser.write(chunk);
-            callback();
+            try {
+                parser.write(chunk);
+                callback();
+            } catch (error) {
+                debug("Failed in parser.write! " + error);
+                parser.end();
+                callback(error);
+            }
         } else {
             debug("HTTPParserTransform interrupted by error: " + error);
             parser.end();
