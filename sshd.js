@@ -50,17 +50,6 @@ var Policy = exports.Policy = function (id) {
         res.end();
     };
 
-    /**
-     * Serve an intercepted request to fleet.sock
-     *
-     * @param req
-     * @param res
-     * @param done
-     */
-    self.serveFleetRequest = function (req, res, done) {
-        res.json({});
-        done();
-    };
 };
 
 function asPemKey(contextKey) {
