@@ -131,7 +131,6 @@ var ResponseToStream = function (req, outStream, done) {
         brokenPipe = err;
     });
     self.connection = {
-        // Mock out as many access
         writable: true,
         _httpMessage: self,
         write: function(d, encoding, callback) {
