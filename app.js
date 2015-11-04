@@ -28,12 +28,12 @@ server.findPolicy = function (username, pubkey) {
     if (! hasAccess.equals(pubkey)) return;
 
     var policy = new sshd.Policy(username + "'s id_rsa.pub");
-    policy.fleetConnect = express();
-    policy.fleetConnect.use(express_json());
-    policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
+    policy.fleetAPI = express();
+    policy.fleetAPI.use(express_json());
+    policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
         res.json(fakeAPIResponses.machines);
     });
-    policy.fleetConnect.get("/fleet/v1/units/:unit", function (req, res, next) {
+    policy.fleetAPI.get("/fleet/v1/units/:unit", function (req, res, next) {
         var unit = req.params.unit;
         debug("/fleet/v1/units/" + unit);
 
