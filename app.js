@@ -5,7 +5,8 @@ var fs = require('fs'),
     debug = require("debug")("restricted-sshd"),
     keys = require("./keys"),
     sshd = require('./sshd'),
-    fakeAPIResponses = require("./test/fleetd").fakeAPIResponses;
+    fake_fleetd = require("./test/fleetd"),
+    fakeAPIResponses = fake_fleetd.fakeAPIResponses;
 
 var argv = process.argv.slice(process.argv[0].endsWith("/node") ? 2 : 1);
 var options = docoptmd(__dirname, {argv: argv});
@@ -45,3 +46,7 @@ server.listen({port: sshdPort},
     function() {
         console.log("Running on port " + this.address().port);
     });
+
+fake_fleetd.listen(function () {
+    console.log("Fake fleetd available on UNIX socket " + this.socketPath);
+});
