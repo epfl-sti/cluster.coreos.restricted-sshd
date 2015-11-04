@@ -168,6 +168,23 @@ describe("http_on_pipe", function () {
                 assert(sink.buf.toString().match("This is a GET on /zoinx"));
             }, done));
     });
+    it("serves POSTs (and then GETs)", function (done) {
+        var src = makeStringSource(
+            "POST /zoinx HTTP/1.1\r\n" +
+            "Host: zoinx.org\r\n" +
+            "Content-Length: 5\r\n" +
+            "\r\n" +
+            "ZOINX" +  // Note conspicuous lack of \r\n
+            "GET /zoinx HTTP/1.1\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        var sink = makeStringSink();
+        http_on_pipe(src, sink, bogoServe,
+            checkThenDone(function (err) {
+                assert.equal(err, undefined);
+                assert(sink.buf.toString().match(
+                    /This is a POST on \/zoinx[\s\S]*This is a GET on \/zoinx/));
+            }, done));
+    });
     it("deals with parse errors");
     it("deals with EPIPE", function (done) {
         var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
