@@ -5,7 +5,7 @@ var fs = require('fs'),
     debug = require("debug")("restricted-sshd"),
     keys = require("./keys"),
     sshd = require('./sshd'),
-    fake_api_responses = require("./test/api_responses");
+    fakeAPIResponses = require("./test/fleetd").fakeAPIResponses;
 
 var argv = process.argv.slice(process.argv[0].endsWith("/node") ? 2 : 1);
 var options = docoptmd(__dirname, {argv: argv});
@@ -30,13 +30,13 @@ server.findPolicy = function (username, pubkey) {
     policy.fleetConnect = express();
     policy.fleetConnect.use(express_json());
     policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
-        res.json(fake_api_responses.machines);
+        res.json(fakeAPIResponses.machines);
     });
     policy.fleetConnect.get("/fleet/v1/units/:unit", function (req, res, next) {
         var unit = req.params.unit;
         debug("/fleet/v1/units/" + unit);
 
-        res.json(fake_api_responses.unit_stiitops_prometheus_service);
+        res.json(fakeAPIResponses.unit_stiitops_prometheus_service);
     });
     return policy;
 };
