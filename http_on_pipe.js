@@ -7,6 +7,7 @@ var assert = require("assert"),
     through2 = require('through2'),
     EventEmitter = require('events').EventEmitter,
     Transform = require('stream').Transform,
+    Writable = require('stream').Writable,
 // Using node's private API here – This saves us so much work that
     // I'm not even ashamed.
     connectionListener = require('_http_server')._connectionListener,
@@ -19,23 +20,37 @@ var assert = require("assert"),
  * @param stdout
  * @param {handler} handler Handler function, HTTP-style
  *                  (takes req and res, eventually calls res.end())
+ * @param {Function} done Called when it's time to close shop
  */
-module.exports = function (stdin, stdout, handler) {
-    stdin.pipe(new HTTPParserTransform())
-        .pipe(through2.obj(
-            function (req, enc, consumed) {
-                var res = new ResponseToStream(req, stdout,
-                    function (e) {
-                        if (! e) {
-                            debug("Consumed request " + req.url);
-                            consumed();
-                        } else {
-                            debug("Write error responding to " + req.url + ": " + e);
-                            consumed(e);
-                        }
-                    });
-                handler(req, res);
-            }));
+module.exports = function (stdin, stdout, handler, done) {
+    var closed = false;
+    var closing = function(error) {
+        if (closed) return;
+        debug("closing, error = " + error);
+        closed = true;
+        done(error);
+    };
+
+    var httpTransform = new HTTPParserTransform();
+    var requestSink = new Writable({ objectMode: true });
+    requestSink._write = function (req, unused_enc, consumed) {
+        var res = new ResponseToStream(req, stdout,
+            function (e) {
+                if (! e) {
+                    debug("Consumed request " + req.url);
+                    consumed();
+                } else {
+                    debug("Write error responding to " + req.url + ": " + e);
+                    closing(e);
+                    consumed(e);
+                }
+            });
+        handler(req, res);
+    };
+    stdin.pipe(httpTransform)
+        .pipe(requestSink);
+    requestSink.on("finish", closing);
+    stdout.on("end", closing);
 };
 
 /**
@@ -68,7 +83,13 @@ var HTTPParser = module.exports.HTTPParser = function () {
             debug("fakeSocket.on(\"" + event + "\", ...)");
             fakeSocketEvents[event] = cb;
         },
-        destroy: function () {}
+        destroy: function (error) {
+            if (!error) {
+                error = new Error("Parser wants to destroy" +
+                    " a perfectly good fakeSocket?")
+            }
+            self.emit("error", error);
+        }
     };
 
     connectionListener.call(fakeServer, fakeSocket);
@@ -102,14 +123,25 @@ var HTTPParserTransform = function () {
         debug("incoming request: " + req.url);
         self.push(req);
     });
+    var error;
+    parser.on("error", function (e) {
+        error = e;
+    });
     this._transform = function (chunk, encoding, callback) {
-        parser.write(chunk);
-        callback();
+        if (! error) {
+            parser.write(chunk);
+            callback();
+        } else {
+            debug("HTTPParserTransform interrupted by error: " + error);
+            parser.end();
+            callback(error);
+        }
     };
 
     this._flush = function (callback) {
         parser.end();
-        callback();
+        debug("HTTPParserTransform closing down, error: " + error);
+        callback(error);
     };
 };
 util.inherits(HTTPParserTransform, Transform);

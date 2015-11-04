@@ -4,6 +4,9 @@
 
 var assert = require("assert"),
     Q = require("q"),
+    Readable = require('stream').Readable,
+    Writable = require('stream').Writable,
+    debug = require("debug")("tests/http_on_pipe"),
     http_on_pipe = require("../../http_on_pipe"),
     HTTPParser = http_on_pipe.HTTPParser;
 
@@ -102,16 +105,68 @@ describe("HTTPParser", function () {
             "Host: zoinx.org\r\n\r\n");
         parser.end();
     });
-    it("deals with parse errors", function () {
+    it("deals with parse errors", function (done) {
         var parser = new HTTPParser();
-        writeStringToParser(parser, "GET\r\n" +
-            "Host: zoinx.org\r\n\r\n");
-        parser.end();
         parser.on("request", function () {
             done(new Error("This sure shouldn't parse"));
         });
         parser.on("error", function () {
             done();
+        });
+        writeStringToParser(parser, "GET\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        parser.end();
+    });
+});
+
+describe("http_on_pipe", function () {
+    function makeStringSource(readBuf) {
+        var source = new Readable();
+        source._read = function () {
+            source.push(readBuf);
+            readBuf = null;
+        };
+        return source;
+    }
+
+    function makeStringSink() {
+        var sink = new Writable();
+        sink.buf = "";
+        sink._write = function (data, encoding, cb) {
+            sink.buf += data;
+            debug("sink.buf is now " + sink.buf.length + " bytes long");
+            cb();
+        };
+        return sink;
+    }
+
+    function bogoServe(req, res) {
+        debug("bogoServing");
+        res.setHeader("Content-Type", "text/plain");
+        res.write("This is a " + req.method + " on " + req.url + "\n");
+        res.end();
+    }
+
+    it("serves", function (done) {
+        var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
+            "Host: zoinx.org\r\n\r\n");
+        var sink = makeStringSink();
+        http_on_pipe(src, sink, bogoServe, function (err) {
+            try {
+                assert.equal(err, undefined);
+                assert(sink.buf.toString().match("This is a GET on /zoinx"));
+                done();
+            } catch (e) {
+                done(e);
+            }
         })
     });
+    it("deals with parse errors");
+    it("deals with EPIPE", function (done) {
+        var brokenPipe = new Writable();
+        brokenPipe._write = function (chunk, encoding, callback) {
+            callback(new Error("EPIPE"));
+        }
+    });
+    it("deals with errors thrown in the handler");
 });

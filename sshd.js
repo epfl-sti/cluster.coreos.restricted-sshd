@@ -21,15 +21,20 @@ var Policy = exports.Policy = function (id) {
     var self = this;
     self.debug = function(msg) { debug(id + ": " + msg); };
 
+
     self.handleFleetStream = function (stream) {
+        var closed;
+        function close(error) {
+            if (closed) return;
+            stream.exit(error ? 2 : 0);
+            stream.end();
+        }
+        stream.on("close", close);
+
         http_on_pipe(stream.stdin, stream.stdout,
             function(req, res) {
                 self.fleetConnect(req, res);
-            });
-        stream.stdin.on("close", function () {
-            stream.exit(0);
-            stream.end();
-        });
+            }, close);
     };
 
     /**
