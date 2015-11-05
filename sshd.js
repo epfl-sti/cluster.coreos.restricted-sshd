@@ -5,10 +5,24 @@
 var Duplex = require("stream").Duplex,
     crypto = require('crypto'),
     inspect = require('util').inspect,
-    debug = require('debug')('sshd'),
+    debugOrig = require('debug')('sshd'),
     ssh2 = require('ssh2'),
     utils = ssh2.utils,
     http_on_pipe = require("./http_on_pipe");
+
+function debug(/* hints..., msg */) {
+    if (! debugOrig.enabled) { return; }
+    var args = Array.prototype.slice.call(arguments);
+    var msg = args.pop();
+
+    while(args.length > 0) {
+        var hint = args.pop();
+        var label;
+        if (hint.getDebugLabel) { label = hint.getDebugLabel(); }
+        if (label !== undefined) { msg = "[" + label + "] " + msg; }
+    }
+    debugOrig(msg);
+}
 
 /**
  * A policy object.
@@ -31,6 +45,7 @@ var Policy = exports.Policy = function (id) {
      * A moniker for debug messages.
      */
     self.id = id;
+    self.getDebugLabel = function() { return "<Policy " + id + ">"; }
 
     /**
      * The sshd.Server instance this policy object belongs to.
@@ -126,52 +141,48 @@ var Server = exports.Server = function (options) {
         client.auth.findPolicy = self.findPolicy.bind(self);
         client.auth.attach(client, self);
 
-        // client.auth.attach adds a .debug method:
-        client.debug('new connection');
+        debug(client, 'new connection');
 
         client.on('ready', function () {
-            client.debug('Authentication complete!');
-
             client.on('session', function (accept, reject) {
-                client.debug('Client requests a session');
+                debug(client, 'requests a session');
 
                 var session = accept();
                 session.once('exec', function (accept, reject, info) {
-                    client.debug('Client wants to execute: ' +
-                        inspect(info.command));
+                    debug(client, 'wants to execute: ' + inspect(info.command));
                     if (info.command.indexOf("fleetctl fd-forward") > -1 &&
                         info.command.indexOf("fleet.sock") > -1) {
-                        client.debug("Routing to restricted fleet.sock");
+                        debug(client, "routing execute to emulated fleetd");
                         var stream = accept();
                         client.policy.handleFleetStream(stream);
                     } else {
-                        client.debug("Unhandled command: " +
+                        debug(client, "Unhandled command: " +
                             inspect(info.command));
                         reject();
                     }
                 });
                 session.on('subsystem', function (accept, reject, info) {
-                    client.debug('Client invokes a subsystem');
+                    debug(client, 'invokes a subsystem');
                     reject();
                 });
                 session.on('auth-agent', function (accept, reject, info) {
-                    client.debug('Client wants to forward agent');
+                    debug(client, 'wants to forward agent');
                     accept();
                 });
             });
         });
         client.on('tcpip', function (accept, reject, info) {
-            client.debug('Client wants to forward TCP ' + inspect(info));
+            debug(client, 'Client wants to forward TCP ' + inspect(info));
             // ... but we are going to disregard that and just forward to
             // ourselves, so that we can pretend we are the remote node.
             client.policy.handleTCPForward(client, accept());
         });
         client.on('openssh.streamlocal', function (accept, reject, info) {
-            client.debug('Client wants to forward a stream');
+            debug(client, 'Client wants to forward a stream');
             reject();
         });
         client.on('end', function () {
-            client.debug("disconnected");
+            debug(client, "disconnected");
         });
     });
 
@@ -211,7 +222,7 @@ var Server = exports.Server = function (options) {
         fakeInternalNode = new ssh2.Server({
             privateKey: self.config.privateKey
         }, function (client) {
-            policy.debug('set up fake internal node');
+            debug(policy, 'set up fake internal node');
             client.auth = new Authenticator();
             client.auth.attach(client, fakeInternalNode);
         });
@@ -249,8 +260,7 @@ function Authenticator() {
  * Take charge of authentication on behalf of `client`
  *
  * Set up a fully functional 'authentication' handler, and a minimalistic
- * 'ready' handler that just sets client.policy. Also alias client.debug
- * to {@link Authenticator~debug}.
+ * 'ready' handler that just sets client.policy.
  *
  * @param client The ssh2.Server's listener parameter
  * @param {Server} server
@@ -258,7 +268,8 @@ function Authenticator() {
 Authenticator.prototype.attach = function(client, server) {
     var self = this;
 
-    client.debug = self.debug;
+    client.getDebugLabel = self.getDebugLabel.bind(self);
+
     client.on('authentication', function (ctx) {
         if (ctx.method === 'none') {
             // Client wants list of authentication methods
@@ -274,11 +285,11 @@ Authenticator.prototype.attach = function(client, server) {
         if (self.publicKey && self.publicKey.toString() !==
             publicKey.toString()) {
             if (self.done) {
-                client.debug("not allowed to switch keys after authentication!");
+                debug(client, "not allowed to switch keys after authentication!");
                 ctx.reject();
                 return;
             } else {
-                client.debug("changing keys from " + self.publicKey + " to "
+                debug(client, "changing keys from " + self.publicKey + " to "
                     + publicKey);
                 self.publicKey = undefined;
                 self.policy = undefined;
@@ -287,7 +298,7 @@ Authenticator.prototype.attach = function(client, server) {
         if (! self.policy) {
             self.policy = self.findPolicy(ctx.username, ctx.key);
             if (! self.policy) {
-                client.debug("presented unacceptable key");
+                debug(client, "presented unacceptable key");
                 ctx.reject();
                 return;
             }
@@ -296,18 +307,18 @@ Authenticator.prototype.attach = function(client, server) {
         if (! ctx.signature) {
             // if no signature present, that means the client is just checking
             // the validity of the given public key
-            client.debug("We will accept this public key");
+            debug(client, "We will accept this public key");
             ctx.accept();
         } else {
             var verifier = crypto.createVerify(ctx.sigAlgo);
             verifier.update(ctx.blob);
             if (verifier.verify(self.publicKey,
                     ctx.signature, 'binary')) {
-                client.debug("Public key authentication successful");
                 self.done = true;
+                debug(client, "Public key authentication successful");
                 ctx.accept();
             } else {
-                client.debug("Failed public key authentication");
+                debug(client, "Failed public key authentication");
                 ctx.reject();
             }
         }
@@ -317,21 +328,19 @@ Authenticator.prototype.attach = function(client, server) {
         /* Eject the policy towards client object */
         client.policy = self.policy;
         client.policy.server = server;
-        client.policy.debug = self.debug;
     });
-};
-
 /**
- * Like regular debug, but tag the message with (purported) user ID.
- *
- * @param msg
+ * For the debug() function
  */
-Authenticator.prototype.debug = function(msg) {
-    var id =
-        this.policy && this.done ? this.policy.id :
-            this.policy ? "?" + this.policy.id + "?":
-                "Pre-auth client";
-    debug(id + ": " + msg);
+Authenticator.prototype.getDebugLabel = function() {
+    var label = this.policyLabel;
+    if (! label) {
+        return "Unauthenticated";
+    } else if (! this.done) {
+        return "?" + label + "?";
+    } else {
+        return label;
+    }
 };
 
 /**
@@ -339,8 +348,7 @@ Authenticator.prototype.debug = function(msg) {
  *
  * The default implementation refuses everything, so you probably want to
  * override this.
- *
- * @todo Document; make asynchronous
  */
-Authenticator.prototype.findPolicy = function (username, key) {
+Authenticator.prototype.findPolicy = function (username, key, done) {
+
 };
