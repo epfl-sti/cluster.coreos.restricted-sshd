@@ -43,13 +43,6 @@ describe('sshd end-to-end test', function () {
                     res.json(JSON.parse(body));
                 });
             });
-            
-            /*policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
-                res.json({"machines":
-                    [{"id":"08160786f7c24ee495fca0b56301397a",
-                        "metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},
-                        "primaryIP":"192.168.11.3"}]});
-            });*/
             return policy;
         };
         var agent = new Agent();
