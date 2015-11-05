@@ -2,7 +2,8 @@
  * sshd entry point, built upon https://github.com/mscdex/ssh2
  */
 
-var crypto = require('crypto'),
+var Duplex = require("stream").Duplex,
+    crypto = require('crypto'),
     inspect = require('util').inspect,
     debug = require('debug')('sshd'),
     ssh2 = require('ssh2'),
@@ -88,28 +89,11 @@ var Policy = exports.Policy = function (id) {
      * container to actually SSH into (disregarding the target of the TCP
      * forwarding request set by the client).
      *
+     * @param client The ssh2.Server's listener parameter
      * @param channel A bidirectional ssh2 channel
-     * @param done Callback invoked once the forwarding session is over
      */
-    self.handleTCPForward = function (channel, done) {
-        self.server.masqueradeSSH(self, function (hiItsMeAgain, initializationError) {
-            if (initializationError) {
-                done(initializationError);
-                return;
-            }
-            function callDone(opt_error) {
-                if (! done) return;
-                done(opt_error);
-                done = undefined;
-            }
-            channel.on("error", callDone);
-            hiItsMeAgain.on("error", callDone);
-            channel.pipe(hiItsMeAgain);
-            hiItsMeAgain.pipe(channel);
-
-            // TODO: Figure out which of {channel,hiItsMeAgain}.on({"finish","end"})
-            // we need to wait for before calling done().
-        });
+    self.handleTCPForward = function (client, channel) {
+        self.server.masqueradeSSH(client.policy, channel);
     };
 };
 
@@ -180,7 +164,7 @@ var Server = exports.Server = function (options) {
             client.debug('Client wants to forward TCP ' + inspect(info));
             // ... but we are going to disregard that and just forward to
             // ourselves, so that we can pretend we are the remote node.
-            client.policy.handleTCPForward(accept());
+            client.policy.handleTCPForward(client, accept());
         });
         client.on('openssh.streamlocal', function (accept, reject, info) {
             client.debug('Client wants to forward a stream');
@@ -216,31 +200,24 @@ var Server = exports.Server = function (options) {
      *
      * @param policy The policy object that has the state to second-guess
      *               where exactly fleetctl intends to reach
-     * @param {Server~masqueradeSSH~initDoneCallback} done
+     * @param channel The SSH channel to serve to
      */
-    self.masqueradeSSH = function(policy, done) {
+    self.masqueradeSSH = function(policy, channel) {
         // TODO
         // Don't .listen() it; just steal its 'connection' handler
         // Create a fake connection and feed it to the above
         // call done(), wipe hands on pants
-        var fakeInternalNode = new ssh2.Server({
+        var fakeInternalNode;
+        fakeInternalNode = new ssh2.Server({
             privateKey: self.config.privateKey
         }, function (client) {
-            self.auth.debug('set up fake internal node');
+            policy.debug('set up fake internal node');
             client.auth = new Authenticator();
-            client.auth.attach(client, self);
+            client.auth.attach(client, fakeInternalNode);
         });
+        var ssh2socketHandler = fakeInternalNode._srv.listeners("connection")[0];
+        ssh2socketHandler(channel);
     };
-    /**
-     * @callback Server~masqueradeSSH~initDoneCallback
-     *
-     * Invoked as done(error) or done(null, shimSSHStream)
-     *
-     * @param error The error that occurred trying to set up the shim
-     * @param shimSSHStream A duplex stream mimicking a client socket to an
-     *                      SSH server (socket-only methods and events are not
-     *                      emulated).
-     */
 };
 
 /**
@@ -275,8 +252,7 @@ function Authenticator() {
  * 'ready' handler that just sets client.policy. Also alias client.debug
  * to {@link Authenticator~debug}.
  *
- * @param client The client parameter passed down by the ssh2.Server's
- *               listener
+ * @param client The ssh2.Server's listener parameter
  * @param {Server} server
  */
 Authenticator.prototype.attach = function(client, server) {
@@ -341,6 +317,7 @@ Authenticator.prototype.attach = function(client, server) {
         /* Eject the policy towards client object */
         client.policy = self.policy;
         client.policy.server = server;
+        client.policy.debug = self.debug;
     });
 };
 

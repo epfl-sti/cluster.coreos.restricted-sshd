@@ -23,8 +23,6 @@ var hasAccess = new keys.UserPublicKey(fs.readFileSync(process.env.HOME + '/.ssh
 
 server.findPolicy = function (username, pubkey) {
     // TODO: improve - One ACL of SSH keys per tenant.
-    // (The tenant name is the --ssh-username passed to fleetctl; not sure
-    // how to fetch that from ssh2 API, must be passed to findPolicy)
     if (! hasAccess.equals(pubkey)) return;
 
     var policy = new sshd.Policy(username + "'s id_rsa.pub");
