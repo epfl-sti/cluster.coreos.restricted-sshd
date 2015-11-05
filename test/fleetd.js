@@ -13,7 +13,7 @@ var debug = require("debug")("test/fleetd"),
  *
  * @constructor
  */
-var FakeFleetd = function () {
+var FakeFleetd = module.exports.FakeFleetd = function () {
     var self = this;
     var app = self.app = express();
     app.use(express_json());

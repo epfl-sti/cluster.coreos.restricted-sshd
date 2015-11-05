@@ -9,11 +9,12 @@ var fs = require("fs"),
     sshd = require("../sshd");
 require("./thenMochaDone");
 
-var TestServer = exports.TestServer = function () {
+var TestServer = exports.TestServer = function (fakeFleetd) {
     this.hostKey = new keys.HostKey();
     this.server = new sshd.Server({
         privateKey: this.hostKey.privateAsX509String()
     });
+    this.fakeFleetd = fakeFleetd;
 };
 
 function writeKnownHostsFile(testServer, done) {
@@ -26,15 +27,17 @@ function writeKnownHostsFile(testServer, done) {
 TestServer.prototype.before = function (before) {
     var self = this;
     before(function (done) {
-        Q.nfcall(self.server.listen)
-            .then(function () {
-                self.port = self.server.address().port;
-                return Q.nfcall(tmp.dir);
-            }).then(function (dir_and_callback) {
-                var dir = dir_and_callback[0];
-                self.knownHostsFilePath = path.join(dir, "known_hosts");
-                return Q.nfcall(writeKnownHostsFile, self);
-            }).thenMochaDone(done);
+        self.fakeFleetd.started.then(
+            Q.nfcall(self.server.listen)
+                .then(function () {
+                    self.port = self.server.address().port;
+                    return Q.nfcall(tmp.dir);
+                }).then(function (dir_and_callback) {
+                    var dir = dir_and_callback[0];
+                    self.knownHostsFilePath = path.join(dir, "known_hosts");
+                    return Q.nfcall(writeKnownHostsFile, self);
+                }).thenMochaDone(done)
+        );
     });
 };
 

@@ -3,12 +3,14 @@ var assert = require("assert"),
     which = require("which"),
     express = require('express'),
     express_json = require('express-json'),
+    request = require('request'),
     debug = require("debug")("tests/sshd.js"),
     keys = require("../../keys"),
     sshd = require("../../sshd"),
     TestSshServer = require('../sshd').TestServer,
     testKeys = require('../keys'),
     command = require("../shell-command"),
+    FakeFleetd = require("../fleetd").FakeFleetd,
     Agent = require("../ssh-agent").Agent;
 
 require("../thenMochaDone");
@@ -22,7 +24,8 @@ try {
 
 describe('sshd end-to-end test', function () {
     if (! fleetctl) return;
-    var server = new TestSshServer;
+    var fakeFleetd = new FakeFleetd;
+    var server = new TestSshServer(fakeFleetd);
     server.before(before);
 
     it("runs fleetctl list-machines", function (done) {
@@ -31,14 +34,23 @@ describe('sshd end-to-end test', function () {
         server.server.findPolicy = function (username, pubkey) {
             if (! hasAccess.equals(pubkey)) return;
             var policy = new sshd.Policy("test pubkey");
+
             policy.fleetConnect = express();
             policy.fleetConnect.use(express_json());
             policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
+                request("http://unix:" + fakeFleetd.socketPath +
+                    ":/fleet/v1/machines", function (err, unusedres, body) {
+                    debug(body);
+                    res.json(JSON.parse(body));
+                });
+            });
+            
+            /*policy.fleetConnect.get("/fleet/v1/machines", function (req, res, next) {
                 res.json({"machines":
                     [{"id":"08160786f7c24ee495fca0b56301397a",
                         "metadata":{"has_ups":"true","region":"epflsti-ne-cloud"},
                         "primaryIP":"192.168.11.3"}]});
-            });
+            });*/
             return policy;
         };
         var agent = new Agent();
