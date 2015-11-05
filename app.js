@@ -8,6 +8,8 @@ var fs = require('fs'),
     fake_fleetd = require("./test/fleetd"),
     fakeAPIResponses = fake_fleetd.fakeAPIResponses;
 
+require('./exceptions');
+
 var argv = process.argv.slice(process.argv[0].endsWith("/node") ? 2 : 1);
 var options = docoptmd(__dirname, {argv: argv});
 
