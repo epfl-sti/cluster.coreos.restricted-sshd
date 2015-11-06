@@ -6,6 +6,7 @@ var assert = require('assert'),
     crypto = require('crypto'),
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
+    debugSshd = require('debug')('sshd_ssh2'),
     merge = require("merge"),
     ptySpawn = require("pty.js").spawn,
     Q = require("q"),
@@ -48,7 +49,7 @@ var Policy = exports.Policy = function (id) {
      * A moniker for debug messages.
      */
     self.id = id;
-    self.getDebugLabel = function() { return "<Policy " + id + ">"; }
+    self.getDebugLabel = function() { return "<Policy " + id + ">"; };
 
     /**
      * The sshd.Server instance this policy object belongs to.
@@ -122,12 +123,70 @@ var Policy = exports.Policy = function (id) {
             cwd: "/",
             env: merge(process.env, {TERM: pty.term})
         });
-        cmd.pipe(stream); stream.pipe(cmd);
+        stream.pipe(cmd);
+        // Instead of a pipe, propagate data only
+        // This gives us the time to propagate exit status in case
+        // stdout close is detected before child exit
+        cmd.on("data", function (data) {
+            stream.write(data);
+        });
+
+        var exited = Q.defer(),
+            cmdStdinClosed = Q.defer(),
+            cmdStdoutClosed = Q.defer();
+
+        Q.all([exited.promise, cmdStdinClosed.promise, cmdStdoutClosed.promise])
+            .then(function (results) {
+                var exitCode = results[0][0];
+                var signal = results[0][1];
+                debug("cmd is all done: exitCode=" + exitCode +
+                    ", signal=" + signal);
+                var exitRet = stream.exit(signal || exitCode);
+                debug("exitRet = " + exitRet);
+                stream.end();
+            });
+        var allDone = Q.all([]);
+        cmd.on("exit", function (exitCode, signal) {
+            debug("Command exited with exit code " + exitCode + ", signal " + signal);
+            if (! signal) {
+                exited.resolve([exitCode, undefined]);
+            } else {
+                // Since pty doesn't respect the node convention for signals
+                // either, we need to translate back.
+                // Assume Linux signal numbering (server will typically run
+                // on Linux)
+                var signalName = {
+                    1: 'SIGHUP',
+                    9: 'SIGKILL'
+                };
+                if (signal + 0 === signal) {
+                    signal = signalName[signal] || ("SIG" + signal);
+                }
+            }
+            exited.resolve([null, signal]);
+        });
+        cmd.on("end", function () {
+            debug("cmd end!");
+            cmdStdinClosed.resolve();
+        });
+        cmd.on("finish", function () {
+            debug("cmd finish!");
+            cmdStdoutClosed.resolve();
+        });
+
         cmd.on("error", function (err) {
+            // TODO: How to recover orderly here?
             debug(err);
         });
         stream.on("error", function (err) {
+            // TODO: How to recover orderly here?
             debug(err);
+        });
+        stream.on("end", function () {
+            debug("stream end!");
+        });
+        stream.on("finish", function () {
+            debug("stream finish!");
         });
     };
 
@@ -167,13 +226,18 @@ var Server = exports.Server = function (options) {
     self.config = options;
 
     var server = new ssh2.Server({
-        privateKey: options.privateKey
+        privateKey: options.privateKey,
+        debug: function(msg) { debugSshd("sshd: " + msg); }
     }, function (client) {
         client.auth = new Authenticator();
         client.auth.findPolicy = self.findPolicy.bind(self);
         client.auth.attach(client, self);
 
         debug(client, 'new connection');
+
+        client.on("error", function (err) {
+            debug("sshd: error: " + err);
+        });
 
         client.on('ready', function () {
             client.policy.server = self;
@@ -258,7 +322,8 @@ var Server = exports.Server = function (options) {
         // call done(), wipe hands on pants
         var fakeInternalNode;
         fakeInternalNode = new ssh2.Server({
-            privateKey: self.config.privateKey
+            privateKey: self.config.privateKey,
+            debug: function(msg) { debugSshd("fake internal sshd: " + msg); }
         }, function (client) {
             debug(policy, 'set up fake internal node');
             client.auth = new Authenticator();
@@ -266,6 +331,10 @@ var Server = exports.Server = function (options) {
                 return policy
             };
             client.auth.attach(client, fakeInternalNode);
+
+            client.on("error", function (err) {
+                debug("fake internal sshd: error: " + err);
+            });
 
             client.on('ready', function () {
                 debug("Authenticated on the fake internal node");
@@ -305,6 +374,15 @@ var Server = exports.Server = function (options) {
         });
         var ssh2socketHandler = fakeInternalNode._srv.listeners("connection")[0];
         ssh2socketHandler(channel);
+        channel.on("end", function () {
+            debug("TCP forward channel end");
+        });
+        channel.on("finish", function () {
+            debug("TCP forward channel finish");
+        });
+        channel.on("error", function (err) {
+            debug("TCP forward channel error: " + err);
+        });
     };
 };
 
