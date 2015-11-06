@@ -7,7 +7,7 @@ var assert = require('assert'),
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
     merge = require("merge"),
-    pty = require("pty.js"),
+    ptySpawn = require("pty.js").spawn,
     Q = require("q"),
     ssh2 = require('ssh2'),
     utils = ssh2.utils,
@@ -112,6 +112,35 @@ var Policy = exports.Policy = function (id) {
      */
     self.handleTCPForward = function (client, channel) {
         self.server.masqueradeSSH(client.policy, channel);
+    };
+
+    self.runPtyCommand = function(pty, stream, command, args) {
+        var cmd = ptySpawn(command, args, {
+            name: pty.term,
+            cols: pty.cols,
+            rows: pty.rows,
+            cwd: "/",
+            env: merge(process.env, {TERM: pty.term})
+        });
+        cmd.pipe(stream); stream.pipe(cmd);
+        cmd.on("error", function (err) {
+            debug(err);
+        });
+        stream.on("error", function (err) {
+            debug(err);
+        });
+    };
+
+    self.handleShell = function (pty, stream) {
+        stream.write("Connected to /bin/bash.\n");
+        stream.write("TODO: should rather ssh somewhere and docker run /bin/sh\n");
+        self.runPtyCommand(pty, stream, '/bin/bash', []);
+    };
+
+    self.handleExec = function (pty, stream, command) {
+        stream.write("Connected to /bin/bash.\n");
+        stream.write("TODO: should rather run \"" + inspect(command) + "\"\n");
+        self.runPtyCommand(pty, stream, '/bin/bash', []);
     };
 };
 
@@ -245,25 +274,18 @@ var Server = exports.Server = function (options) {
                     var session = accept();
                     // Need to remember the pty details in between callbacks;
                     // see examples/server-chat.js in the ssh2 sources
-                    var rows, cols, term;
+                    var pty = {};
                     session.once("pty", function (accept, reject, info) {
-                        rows = info.rows;
-                        cols = info.cols;
-                        term = info.term;
+                        pty.rows = info.rows;
+                        pty.cols = info.cols;
+                        pty.term = info.term;
                         accept && accept();
                         debug(client, "pty accepted, term=" + info.term);
                     });
                     session.once('shell', function (accept, reject, info) {
                         debug(client, 'wants a shell');
-                        if (term) {
-                            var pty = pty.spawn('bash', [], {
-                                name: term,
-                                cols: cols,
-                                rows: rows,
-                                env: merge(process.env, {TERM: term})
-                            });
-                            pty.pipe(cient); client.pipe(pty);
-                            accept();
+                        if (pty) {
+                            policy.handleShell(pty, accept());
                         } else {
                             debug(client, "refusing to start shell without a pty");
                             reject();
@@ -271,23 +293,10 @@ var Server = exports.Server = function (options) {
                     });
                     session.once('exec', function (accept, reject, info) {
                         debug(client, 'wants to execute: ' + inspect(info.command));
-                        if (term) {
-                            var cmd = pty.spawn('/bin/bash', [], {
-                                name: term,
-                                cols: cols,
-                                rows: rows,
-                                env: merge(process.env, {TERM: term})
-                            });
-                            var stream = accept();
-                            cmd.pipe(stream); stream.pipe(cmd);
-                            cmd.on("error", function (err) {
-                                debug(err);
-                            });
-                            stream.on("error", function (err) {
-                                debug(err);
-                            });
+                        if (pty) {
+                            policy.handleExec(pty, accept(), info.command);
                         } else {
-                            debug(client, "refusing to start shell without a pty");
+                            debug(client, "refusing to exec without a pty");
                             reject();
                         }
                     });
