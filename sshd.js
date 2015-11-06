@@ -6,6 +6,7 @@ var Duplex = require("stream").Duplex,
     crypto = require('crypto'),
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
+    Q = require("q"),
     ssh2 = require('ssh2'),
     utils = ssh2.utils,
     http_on_pipe = require("./http_on_pipe");
@@ -144,6 +145,7 @@ var Server = exports.Server = function (options) {
         debug(client, 'new connection');
 
         client.on('ready', function () {
+            client.policy.server = self;
             client.on('session', function (accept, reject) {
                 debug(client, 'requests a session');
 
@@ -190,13 +192,17 @@ var Server = exports.Server = function (options) {
     self.address = server.address.bind(server);
 
     /**
-     * Overridable method: find a policy for a given public key
-     * @param key
-     * @returns Policy instance, or undefined
+     * Construct a policy object for a given public key
      *
-     * @todo Make asynchronous
+     * The default implementation refuses everything, so you probably
+     * want to override it.
+     *
+     * @param username The --ssh-username to fleetctl
+     * @param publickey The public key as an SSH-style text string
+     *                  (e.g. "ssh-rsa AAAAABBBBCCC= optional-id")
+     * @returns Policy instance, or Policy promise, or undefined
      */
-    self.findPolicy = function (key) {};
+     self.findPolicy  = function (username, key) {};
 
     /**
      * Provide a shim to a mock internal node as a pseudo-socket.
@@ -257,18 +263,43 @@ function Authenticator() {
 }
 
 /**
- * Take charge of authentication on behalf of `client`
+ * Take charge `client`'s "authentication" event.
  *
- * Set up a fully functional 'authentication' handler, and a minimalistic
- * 'ready' handler that just sets client.policy.
+ * When authentication is complete, set client.policy to the applicable
+ * Policy object, and set self.done to true.
  *
  * @param client The ssh2.Server's listener parameter
- * @param {Server} server
  */
-Authenticator.prototype.attach = function(client, server) {
+Authenticator.prototype.attach = function(client) {
     var self = this;
 
     client.getDebugLabel = self.getDebugLabel.bind(self);
+
+    // A one-slot cache for the policy object.
+    // Mutation is forbidden once authentication is performed.
+    var policyCache = {};
+    policyCache.get = function(username, key) {
+        var keyAsString = asPemKey(key).toString();
+        if (policyCache.username) {
+            if (policyCache.username === username &&
+                policyCache.keyAsString === keyAsString) {
+                // Cache read
+                return policyCache.cached;
+            } else if (self.done) {
+                debug(self, "attempted to switch keys after authentication!");
+                return;
+            } else {
+                debug(self, "changing identities from ("
+                    + policyCache.username + ", " + policyCache.keyAsString
+                    + ") to (" + username + ", " + keyAsString);
+            }
+        }
+        // Cache write-through
+        policyCache.username = username;
+        policyCache.keyAsString = keyAsString;
+        policyCache.cached = self.findPolicy(username, key);
+        return policyCache.cached;
+    };
 
     client.on('authentication', function (ctx) {
         if (ctx.method === 'none') {
@@ -281,54 +312,40 @@ Authenticator.prototype.attach = function(client, server) {
             return;
         }
 
-        var publicKey = asPemKey(ctx.key);
-        if (self.publicKey && self.publicKey.toString() !==
-            publicKey.toString()) {
-            if (self.done) {
-                debug(client, "not allowed to switch keys after authentication!");
-                ctx.reject();
-                return;
-            } else {
-                debug(client, "changing keys from " + self.publicKey + " to "
-                    + publicKey);
-                self.publicKey = undefined;
-                self.policy = undefined;
-            }
-        }
-        if (! self.policy) {
-            self.policy = self.findPolicy(ctx.username, ctx.key);
-            if (! self.policy) {
-                debug(client, "presented unacceptable key");
-                ctx.reject();
-                return;
-            }
-            self.publicKey = publicKey;
-        }
-        if (! ctx.signature) {
-            // if no signature present, that means the client is just checking
-            // the validity of the given public key
-            debug(client, "We will accept this public key");
-            ctx.accept();
-        } else {
-            var verifier = crypto.createVerify(ctx.sigAlgo);
-            verifier.update(ctx.blob);
-            if (verifier.verify(self.publicKey,
-                    ctx.signature, 'binary')) {
-                self.done = true;
-                debug(client, "Public key authentication successful");
-                ctx.accept();
-            } else {
-                debug(client, "Failed public key authentication");
-                ctx.reject();
-            }
-        }
+        Q.when(policyCache.get(ctx.username, ctx.key))
+            .then(function (policy) {
+                if (! policy) {
+                    debug(self, "presented unacceptable key");
+                    ctx.reject();
+                    return;
+                }
+                self.policyLabel = policy.getDebugLabel();
+                debug("got policy! " + self.policyLabel);
+                if (! ctx.signature) {
+                    // If no signature is present, that means the client is just
+                    // checking the validity of their public key
+                    debug(self, "We will accept this public key");
+                    ctx.accept();
+                    return;
+                }
+                // Got crypto?
+                var verifier = crypto.createVerify(ctx.sigAlgo);
+                verifier.update(ctx.blob);
+                if (verifier.verify(asPemKey(ctx.key),
+                        ctx.signature, 'binary')) {
+                    debug(self, "Public key authentication successful");
+                    self.done = true;
+                    /* Eject the policy towards client object */
+                    client.policy = policy;
+                    ctx.accept();
+                } else {
+                    debug(self, "Failed public key authentication");
+                    ctx.reject();
+                }
+        });
     });
+};
 
-    client.on('ready', function () {
-        /* Eject the policy towards client object */
-        client.policy = self.policy;
-        client.policy.server = server;
-    });
 /**
  * For the debug() function
  */
@@ -344,11 +361,11 @@ Authenticator.prototype.getDebugLabel = function() {
 };
 
 /**
- * Construct the policy object for this username and key.
+ * Overridable method: find a policy for a given public key
  *
- * The default implementation refuses everything, so you probably want to
- * override this.
+ * @param username The --ssh-username to fleetctl
+ * @param publickey The public key as an SSH-style text string
+ *                  (e.g. "ssh-rsa AAAAABBBBCCC= optional-id")
+ * @returns Policy instance, or Policy promise, or undefined
  */
-Authenticator.prototype.findPolicy = function (username, key, done) {
-
-};
+Authenticator.prototype.findPolicy = undefined;
