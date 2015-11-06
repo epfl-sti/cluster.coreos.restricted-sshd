@@ -2,10 +2,12 @@
  * sshd entry point, built upon https://github.com/mscdex/ssh2
  */
 
-var Duplex = require("stream").Duplex,
+var assert = require('assert'),
     crypto = require('crypto'),
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
+    merge = require("merge"),
+    pty = require("pty.js"),
     Q = require("q"),
     ssh2 = require('ssh2'),
     utils = ssh2.utils,
@@ -220,6 +222,7 @@ var Server = exports.Server = function (options) {
      * @param channel The SSH channel to serve to
      */
     self.masqueradeSSH = function(policy, channel) {
+        assert(policy);
         // TODO
         // Don't .listen() it; just steal its 'connection' handler
         // Create a fake connection and feed it to the above
@@ -230,7 +233,66 @@ var Server = exports.Server = function (options) {
         }, function (client) {
             debug(policy, 'set up fake internal node');
             client.auth = new Authenticator();
+            client.auth.findPolicy = function () {
+                return policy
+            };
             client.auth.attach(client, fakeInternalNode);
+
+            client.on('ready', function () {
+                debug("Authenticated on the fake internal node");
+                client.on('session', function (accept, reject) {
+                    debug(client, 'requests a session on fake internal node');
+                    var session = accept();
+                    // Need to remember the pty details in between callbacks;
+                    // see examples/server-chat.js in the ssh2 sources
+                    var rows, cols, term;
+                    session.once("pty", function (accept, reject, info) {
+                        rows = info.rows;
+                        cols = info.cols;
+                        term = info.term;
+                        accept && accept();
+                        debug(client, "pty accepted, term=" + info.term);
+                    });
+                    session.once('shell', function (accept, reject, info) {
+                        debug(client, 'wants a shell');
+                        if (term) {
+                            var pty = pty.spawn('bash', [], {
+                                name: term,
+                                cols: cols,
+                                rows: rows,
+                                env: merge(process.env, {TERM: term})
+                            });
+                            pty.pipe(cient); client.pipe(pty);
+                            accept();
+                        } else {
+                            debug(client, "refusing to start shell without a pty");
+                            reject();
+                        }
+                    });
+                    session.once('exec', function (accept, reject, info) {
+                        debug(client, 'wants to execute: ' + inspect(info.command));
+                        if (term) {
+                            var cmd = pty.spawn('/bin/bash', [], {
+                                name: term,
+                                cols: cols,
+                                rows: rows,
+                                env: merge(process.env, {TERM: term})
+                            });
+                            var stream = accept();
+                            cmd.pipe(stream); stream.pipe(cmd);
+                            cmd.on("error", function (err) {
+                                debug(err);
+                            });
+                            stream.on("error", function (err) {
+                                debug(err);
+                            });
+                        } else {
+                            debug(client, "refusing to start shell without a pty");
+                            reject();
+                        }
+                    });
+                });
+            });
         });
         var ssh2socketHandler = fakeInternalNode._srv.listeners("connection")[0];
         ssh2socketHandler(channel);
