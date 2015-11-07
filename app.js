@@ -1,7 +1,5 @@
 var fs = require('fs'),
     docoptmd = require('docoptmd'),
-    express = require('express'),
-    express_json = require('express-json'),
     debug = require("debug")("restricted-sshd"),
     keys = require("./keys"),
     sshd = require('./sshd'),
@@ -28,8 +26,6 @@ server.findPolicy = function (username, pubkey) {
     if (! hasAccess.equals(pubkey)) return;
 
     var policy = new sshd.Policy(username + "'s id_rsa.pub");
-    policy.fleetAPI = express();
-    policy.fleetAPI.use(express_json());
     policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
         res.json(fakeAPIResponses.machines);
     });

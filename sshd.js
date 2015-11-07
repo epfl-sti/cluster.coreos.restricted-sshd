@@ -4,6 +4,8 @@
 
 var assert = require('assert'),
     crypto = require('crypto'),
+    express = require('express'),
+    express_json = require('express-json'),
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
     debugSshd = require('debug')('sshd_ssh2'),
@@ -89,13 +91,8 @@ var Policy = exports.Policy = function (id) {
      *
      * @type {Function}
      */
-    self.fleetAPI = function (req, res) {
-        debug("Hit default fleetd handler - Override me in your code");
-        res.writeHead(404, {"Content-Type": "text/plain"});
-        res.write("No handler is set for requests to " +
-            "the restricted fleetd UNIX domain socket");
-        res.end();
-    };
+    self.fleetAPI = express();
+    self.fleetAPI.use(express_json());
 
     /**
      * Loop back TCP forwards to ourselves.

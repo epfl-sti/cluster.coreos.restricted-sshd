@@ -1,8 +1,6 @@
 'use strict';
 var assert = require("assert"),
     which = require("which"),
-    express = require('express'),
-    express_json = require('express-json'),
     request = require("request"),
     debug = require("debug")("tests/sshd.js"),
     keys = require("../../keys"),
@@ -24,27 +22,27 @@ try {
 
 describe('sshd end-to-end test', function () {
     if (! fleetctl) return;
+
+    var fakeUserKey = new testKeys.UserKey();
+    var hasAccess = new keys.UserPublicKey(fakeUserKey.publicAsSshString());
+
     var fakeFleetd = new FakeFleetd;
     var server = new TestSshServer(fakeFleetd);
+    server.server.findPolicy = function (username, pubkey) {
+        if (! hasAccess.equals(pubkey)) return;
+        var policy = new sshd.Policy("test pubkey");
+        policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
+            request("http://unix:" + fakeFleetd.socketPath +
+                ":/fleet/v1/machines", function (err, unusedres, body) {
+                debug(body);
+                res.json(JSON.parse(body));
+            });
+        });
+        return policy;
+    };
     server.before(before);
 
     it("runs fleetctl list-machines", function (done) {
-        var fakeUserKey = new testKeys.UserKey();
-        var hasAccess = new keys.UserPublicKey(fakeUserKey.publicAsSshString());
-        server.server.findPolicy = function (username, pubkey) {
-            if (! hasAccess.equals(pubkey)) return;
-            var policy = new sshd.Policy("test pubkey");
-            policy.fleetAPI = express();
-            policy.fleetAPI.use(express_json());
-            policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
-                request("http://unix:" + fakeFleetd.socketPath +
-                    ":/fleet/v1/machines", function (err, unusedres, body) {
-                    debug(body);
-                    res.json(JSON.parse(body));
-                });
-            });
-            return policy;
-        };
         var agent = new Agent();
         agent.addKey(fakeUserKey).then(function () {
             return command("fleetctl", ["--tunnel", "localhost:" + server.port,
