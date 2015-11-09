@@ -5,7 +5,7 @@
  */
 var Q = require('q'),
     spawn = require("child_process").spawn,
-    debug = require("debug")("shell-command"),
+    debug = require("debug")("tests/shell-command"),
     inspect = require("util").inspect;
 
 module.exports = function (command, args, env) {

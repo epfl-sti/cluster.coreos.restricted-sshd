@@ -13,12 +13,9 @@ var options = docoptmd(__dirname, {argv: argv});
 
 var sshdPort = options["--port"];
 var server = new sshd.Server({
-        privateKey: fs.readFileSync('tmpkeys/host_rsa_key'),
+        privateKey: fs.readFileSync('tmpkeys/host_rsa_key')
     });
 
-var buffersEqual = require('buffer-equal-constant-time'),
-    ssh2 = require('ssh2'),
-    utils = ssh2.utils;
 var hasAccess = new keys.UserPublicKey(fs.readFileSync(process.env.HOME + '/.ssh/id_rsa.pub'));
 
 server.findPolicy = function (username, pubkey) {
