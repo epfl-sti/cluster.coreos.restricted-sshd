@@ -11,41 +11,57 @@ var Q = require('q'),
 module.exports = function (command, args, env) {
     debug(command + " " + args + " with env " + inspect(env));
     if (args === undefined) args = [];
-    var opts = { stdio: ['inherit', 'pipe', 'inherit'] };
+    var opts = { stdio: ['inherit', 'pipe', 'pipe'] };
     opts.env = (env !== undefined) ? env : {
             PATH: process.env.PATH,
             HOME: process.env.HOME
         };
     var spawned = spawn(command, args, opts);
-    var processExitedOK = Q.defer();
-    var stdoutClosed = Q.defer();
+    var processExited = Q.defer(),
+        stdoutClosed = Q.defer(),
+        stderrClosed = Q.defer();
 
-    var buf = "";
+    var stdoutBuf = "", stderrBuf = "";
     spawned.stdout.on("data", function (data) {
-        buf = buf + data;
+        stdoutBuf += data;
     });
     spawned.stdout.on("error", function (err) {
         stdoutClosed.reject(err);
     });
     spawned.stdout.on("end", function (err) {
-        stdoutClosed.resolve(buf);
+        stdoutClosed.resolve(stdoutBuf);
+    });
+    spawned.stderr.on("data", function (data) {
+        stderrBuf += data;
+    });
+    spawned.stderr.on("error", function (err) {
+        stderrClosed.reject(err);
+    });
+    spawned.stderr.on("end", function (err) {
+        stderrClosed.resolve(stderrBuf);
     });
 
-    spawned.on("exit", function (exitCode, signal) {
+    var exitCode, signal;
+    spawned.on("exit", function (theExitCode, theSignal) {
+        exitCode = theExitCode;
+        signal = theSignal;
+        processExited.resolve();
+    });
+    return Q.all([processExited.promise, stdoutClosed.promise,
+        stderrClosed.promise]).then(function () {
         var error;
         if (exitCode !== 0) {
             error = new Error(command + " exited with nonzero exit code");
             error.exitCode = exitCode;
-            processExitedOK.reject(error);
+            error.stderr = stderrBuf;
+            throw error;
         } else if (signal) {
             error = new Error(command + " exited with signal");
             error.signal = signal;
-            processExitedOK.reject(error);
-        } else {
-            processExitedOK.resolve();
+            error.stderr = stderrBuf;
+            throw error;
         }
-    });
-    return Q.all([processExitedOK.promise, stdoutClosed.promise]).then(function () {
-        return buf;
+        if (stderrBuf) { debug(stderrBuf); }
+        return stdoutBuf;
     });
 };

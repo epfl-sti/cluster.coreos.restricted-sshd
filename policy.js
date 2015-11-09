@@ -24,7 +24,7 @@ var FilteringPolicy = exports.FilteringPolicy =
         self.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
             self.proxyToFleetd(req).then(function (proxyRes) {
                 res.json(proxyRes.body);
-            });
+            }).catch(next);
         });
         self.fleetAPI.get("/fleet/v1/units/:unit", function (req, res, next) {
             Q.when(self.isUnitAllowed(req.params.unit), function (isAllowed) {

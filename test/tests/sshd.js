@@ -29,6 +29,13 @@ describe('sshd end-to-end test', function () {
 
     var fakeFleetd = new FakeFleetd;
     var server = new TestSshServer(fakeFleetd);
+
+    // For tests that want to e.g. raise errors from the policy:
+    var tweakPolicy;
+    beforeEach(function () {
+        tweakPolicy = function (policy) {};
+    });
+
     server.server.findPolicy = function (username, pubkey) {
         if (! hasAccess.equals(pubkey)) return;
         var policy = new FilteringPolicy("test pubkey",
@@ -39,6 +46,7 @@ describe('sshd end-to-end test', function () {
         policy.isUnitAllowed = function (unitName) {
             return (unitName === "stiitops.prometheus.service");
         };
+        tweakPolicy(policy);
         return policy;
     };
     server.before(before);
@@ -56,10 +64,29 @@ describe('sshd end-to-end test', function () {
         return command("fleetctl", args, agent.getEnv());
     }
 
-    it("runs fleetctl list-machines", function (done) {
-        fleetctl(["list-machines"]).then(function (stdout) {
-            assert(stdout.match(/region=epflsti-ne-cloud/));
-        }).thenMochaDone(done);
+    describe("fleetctl list-machines", function () {
+        it("lists machines", function (done) {
+            fleetctl(["list-machines"]).then(function (stdout) {
+                assert(stdout.match(/region=epflsti-ne-cloud/));
+            }).thenMochaDone(done);
+        });
+
+        it("propagates server errors", function (done) {
+            tweakPolicy = function (policy) {
+                policy.proxyToFleetd = function () {
+                    throw new Error("OUCH");
+                }
+            };
+            fleetctl(["list-machines"]).then(function (stdout) {
+                done("Should have thrown");
+            }).catch(function (error) {
+                assert(error);
+                assert.equal(error.message,
+                    "fleetctl exited with nonzero exit code");
+                assert(error.stderr.match(/got HTTP response code 500/));
+                assert(error.stderr.match(/OUCH/));
+            }).thenMochaDone(done);
+        });
     });
 
     describe("fleetctl ssh", function () {
