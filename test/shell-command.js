@@ -32,10 +32,15 @@ module.exports = function (command, args, env) {
     });
 
     spawned.on("exit", function (exitCode, signal) {
+        var error;
         if (exitCode !== 0) {
-            processExitedOK.reject(new Error(command + " exited with status " + exitCode));
+            error = new Error(command + " exited with nonzero exit code");
+            error.exitCode = exitCode;
+            processExitedOK.reject(error);
         } else if (signal) {
-            processExitedOK.reject(new Error(command + " exited with signal " + signal));
+            error = new Error(command + " exited with signal");
+            error.signal = signal;
+            processExitedOK.reject(error);
         } else {
             processExitedOK.resolve();
         }

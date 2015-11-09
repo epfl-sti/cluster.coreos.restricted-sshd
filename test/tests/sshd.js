@@ -72,5 +72,13 @@ describe('sshd end-to-end test', function () {
                     assert(stdout.match(/hello/));
                 }).thenMochaDone(done);
         });
+        it("propagates exit codes", function (done) {
+            fleetctl(["ssh", "stiitops.prometheus.service", "exit", "42"])
+                .then(function (stdout) {
+                    done("Should have thrown");
+                }, function (err) {
+                    assert.strictEqual(err.exitCode, 42);
+                }).thenMochaDone(done);
+        });
     });
 });
