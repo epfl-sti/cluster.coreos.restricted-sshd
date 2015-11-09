@@ -34,7 +34,8 @@ function debug(/* hints..., msg */) {
  * A policy object.
  *
  * Methods decide what to do in response to the fleetctl client's actions;
- * a number of them are meant to be overridden.
+ * a number of them are meant to be overridden.  See policy.js for a
+ * significantly more useful policy implementation, inheriting from this one.
  *
  * An instance lasts as long as the SSH session, and mutates its own state
  * to keep track of the previous requests in the same session. This allows the
@@ -64,12 +65,15 @@ var Policy = exports.Policy = function (id) {
     self.server = undefined;
 
     /**
-     * The public key that was wielded to unlock this policy.
+     * What to do when fleetctl wants to talk to fleetd.
      *
-     * Set by owner before invoking any methods.
+     * This is invoked by {@link Server} when it sees an attempt to execute
+     * the "fleetctl fd-forward" command. A typical policy will want to
+     * intercept this, and control queries and commands sent this way. Rather
+     * than overriding handleFleetStream, see {@link fleetAPI}.
+     *
+     * @param stream
      */
-    self.publicKey = undefined;
-
     self.handleFleetStream = function (stream) {
         var closed;
         function close(error) {

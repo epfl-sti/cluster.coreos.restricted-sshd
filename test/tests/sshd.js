@@ -4,6 +4,7 @@ var assert = require("assert"),
     request = require("request"),
     debug = require("debug")("tests/sshd.js"),
     keys = require("../../keys"),
+    policy = require("../../policy"),
     sshd = require("../../sshd"),
     TestSshServer = require('../sshd').TestServer,
     testKeys = require('../keys'),
@@ -30,15 +31,8 @@ describe('sshd end-to-end test', function () {
     var server = new TestSshServer(fakeFleetd);
     server.server.findPolicy = function (username, pubkey) {
         if (! hasAccess.equals(pubkey)) return;
-        var policy = new sshd.Policy("test pubkey");
-        policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
-            request("http://unix:" + fakeFleetd.socketPath +
-                ":/fleet/v1/machines", function (err, unusedres, body) {
-                debug(body);
-                res.json(JSON.parse(body));
-            });
-        });
-        return policy;
+        return new policy.FilteringPolicy("test pubkey",
+            fakeFleetd.socketPath);
     };
     server.before(before);
 

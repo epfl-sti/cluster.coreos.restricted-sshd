@@ -1,10 +1,10 @@
 var fs = require('fs'),
     docoptmd = require('docoptmd'),
-    debug = require("debug")("restricted-sshd"),
+    Q = require("q"),
     keys = require("./keys"),
     sshd = require('./sshd'),
-    fake_fleetd = require("./test/fleetd"),
-    fakeAPIResponses = fake_fleetd.fakeAPIResponses;
+    FilteringPolicy = require("./policy").FilteringPolicy,
+    FakeFleetd = require("./test/fleetd").FakeFleetd;
 
 require('./exceptions');
 
@@ -18,28 +18,27 @@ var server = new sshd.Server({
 
 var hasAccess = new keys.UserPublicKey(fs.readFileSync(process.env.HOME + '/.ssh/id_rsa.pub'));
 
+var fleetdSocketPath;
+
 server.findPolicy = function (username, pubkey) {
     // TODO: improve - One ACL of SSH keys per tenant.
     if (! hasAccess.equals(pubkey)) return;
 
-    var policy = new sshd.Policy(username + "'s id_rsa.pub");
-    policy.fleetAPI.get("/fleet/v1/machines", function (req, res, next) {
-        res.json(fakeAPIResponses.machines);
-    });
-    policy.fleetAPI.get("/fleet/v1/units/:unit", function (req, res, next) {
-        var unit = req.params.unit;
-        debug("/fleet/v1/units/" + unit);
-
-        res.json(fakeAPIResponses.unit_stiitops_prometheus_service);
-    });
+    var policy = new FilteringPolicy(username + "'s id_rsa.pub", fleetdSocketPath);
+    policy.isUnitAllowed = function (fleetUnitName) {
+        return fleetUnitName.startsWith("stiitops.");
+    };
     return policy;
 };
 
-server.listen({port: sshdPort},
-    function() {
-        console.log("Running on port " + this.address().port);
-    });
-
-fake_fleetd.listen(function () {
-    console.log("Fake fleetd available on UNIX socket " + this.socketPath);
+// TODO: running the fake fleetd should be gated behind
+// process.NODE_ENV !== "production".
+var fake_fleetd = new FakeFleetd();
+fake_fleetd.started.then(function () {
+    fleetdSocketPath = fake_fleetd.socketPath;
+    console.log("Fake fleetd serving on UNIX socket " + fleetdSocketPath);
+}).then(function () {
+    return Q.nfcall(server.listen, {port: sshdPort});
+}).then(function () {
+    console.log("Restricted sshd serving on port " + server.address().port);
 });
