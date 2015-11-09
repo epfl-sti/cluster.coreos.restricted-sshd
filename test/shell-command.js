@@ -12,7 +12,10 @@ module.exports = function (command, args, env) {
     debug(command + " " + args + " with env " + inspect(env));
     if (args === undefined) args = [];
     var opts = { stdio: ['inherit', 'pipe', 'inherit'] };
-    if (env !== undefined) opts.env = env;
+    opts.env = (env !== undefined) ? env : {
+            PATH: process.env.PATH,
+            HOME: process.env.HOME
+        };
     var spawned = spawn(command, args, opts);
     var processExitedOK = Q.defer();
     var stdoutClosed = Q.defer();
@@ -27,6 +30,7 @@ module.exports = function (command, args, env) {
     spawned.stdout.on("end", function (err) {
         stdoutClosed.resolve(buf);
     });
+
     spawned.on("exit", function (exitCode, signal) {
         if (exitCode !== 0) {
             processExitedOK.reject(new Error(command + " exited with status " + exitCode));

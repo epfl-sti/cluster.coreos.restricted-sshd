@@ -38,9 +38,11 @@ var Agent = exports.Agent = function () {
     var self = this;
     var sshAgentPath;
     self._started = command("ssh-agent").then(function (stdout) {
-        var matched = stdout.match(/SSH_AUTH_SOCK=([^;]+)/);
+        var matched = stdout.match(/SSH_AUTH_SOCK=([^;]+)(\s|\S)*SSH_AGENT_PID=([^;]+)/);
         if (matched) {
             self.agentSocketPath = matched[1];
+            self.agentPid = matched[3];
+            process.on("exit", self.kill.bind(self));
         } else {
             throw new Error(buf);
         }
@@ -60,4 +62,13 @@ Agent.prototype.addKey = function (key) {
 
 Agent.prototype.getEnv = function () {
     return merge(process.env, {"SSH_AUTH_SOCK": this.agentSocketPath});
+};
+
+/**
+ * Asynchronously (fire-and-forget) kill the agent.
+ *
+ * Automatically performed at process.on("exit") time.
+ */
+Agent.prototype.kill = function () {
+    process.kill(this.agentPid);
 };
