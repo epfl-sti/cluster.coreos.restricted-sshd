@@ -195,6 +195,14 @@ describe("http_on_pipe", function () {
             }, done));
     });
     it("deals with EPIPE", function (done) {
+        // At some point I got tired of scaring myself with the stack dump:
+        var consoleTraceOrig = console.trace;
+        var tracedError;
+        console.trace = function (err) {
+            tracedError = err
+        };
+        after(function() { console.trace = consoleTraceOrig });
+
         var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
             "Host: zoinx.org\r\n\r\n");
         var brokenSink = new Writable();
@@ -205,6 +213,7 @@ describe("http_on_pipe", function () {
         http_on_pipe(src, brokenSink, bogoServe,
             checkThenDone(function (err) {
                 assert.equal(err.message, "EPIPE");
+                assert.equal(tracedError.message, "EPIPE");
             }, done));
     });
     it("deals with errors thrown in the handler", function (done) {
