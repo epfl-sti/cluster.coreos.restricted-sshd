@@ -42,13 +42,21 @@ describe('sshd end-to-end test', function () {
     };
     server.before(before);
 
+    var agent = new Agent();
+    before(function (done) {
+        agent.addKey(fakeUserKey).thenMochaDone(done);
+    });
+
+    function fleetctl(args) {
+        args = Array.prototype.concat.call(
+            ["--tunnel", "localhost:" + server.port,
+            "--known-hosts-file", server.knownHostsFilePath],
+            args);
+        return command("fleetctl", args, agent.getEnv());
+    }
+
     it("runs fleetctl list-machines", function (done) {
-        var agent = new Agent();
-        agent.addKey(fakeUserKey).then(function () {
-            return command("fleetctl", ["--tunnel", "localhost:" + server.port,
-                    "--known-hosts-file", server.knownHostsFilePath, "list-machines"],
-                agent.getEnv());
-        }).then(function (stdout) {
+        fleetctl(["list-machines"]).then(function (stdout) {
             assert(stdout.match(/region=epflsti-ne-cloud/));
         }).thenMochaDone(done);
     });
