@@ -4,7 +4,7 @@ var assert = require("assert"),
     request = require("request"),
     debug = require("debug")("tests/sshd.js"),
     keys = require("../../keys"),
-    policy = require("../../policy"),
+    FilteringPolicy = require("../../policy").FilteringPolicy,
     sshd = require("../../sshd"),
     TestSshServer = require('../sshd').TestServer,
     testKeys = require('../keys'),
@@ -31,8 +31,15 @@ describe('sshd end-to-end test', function () {
     var server = new TestSshServer(fakeFleetd);
     server.server.findPolicy = function (username, pubkey) {
         if (! hasAccess.equals(pubkey)) return;
-        return new policy.FilteringPolicy("test pubkey",
+        var policy = new FilteringPolicy("test pubkey",
             fakeFleetd.socketPath);
+        policy.handleExec = function (pty, stream, command) {
+            this.runPtyCommand(pty, stream, "bash", ["-c", command]);
+        };
+        policy.isUnitAllowed = function (unitName) {
+            return (unitName === "stiitops.prometheus.service");
+        };
+        return policy;
     };
     server.before(before);
 
@@ -53,5 +60,17 @@ describe('sshd end-to-end test', function () {
         fleetctl(["list-machines"]).then(function (stdout) {
             assert(stdout.match(/region=epflsti-ne-cloud/));
         }).thenMochaDone(done);
+    });
+
+    describe("fleetctl ssh", function () {
+        before(function (done) {
+            server.appendKnownHost("192.168.11.9").thenMochaDone(done);
+        });
+        it("runs a command that exits successfully", function (done) {
+            fleetctl(["ssh", "stiitops.prometheus.service", "echo", "hello"])
+                .then(function (stdout) {
+                    assert(stdout.match(/hello/));
+                }).thenMochaDone(done);
+        });
     });
 });

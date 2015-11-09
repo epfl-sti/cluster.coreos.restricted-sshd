@@ -17,13 +17,6 @@ var TestServer = exports.TestServer = function (fakeFleetd) {
     this.fakeFleetd = fakeFleetd;
 };
 
-function writeKnownHostsFile(testServer, done) {
-    fs.writeFile(testServer.knownHostsFilePath,
-        "[127.0.0.1]:" + testServer.port + " "
-        + testServer.hostKey.publicAsSshString() + "\n",
-        done);
-}
-
 TestServer.prototype.before = function (before) {
     var self = this;
     before(function (done) {
@@ -35,9 +28,13 @@ TestServer.prototype.before = function (before) {
                 }).then(function (dir_and_callback) {
                     var dir = dir_and_callback[0];
                     self.knownHostsFilePath = path.join(dir, "known_hosts");
-                    return Q.nfcall(writeKnownHostsFile, self);
+                    return self.appendKnownHost("[127.0.0.1]:" + self.port);
                 }).thenMochaDone(done)
         );
     });
 };
 
+TestServer.prototype.appendKnownHost = function (address) {
+    return Q.nfcall(fs.appendFile, this.knownHostsFilePath,
+        address + " " + this.hostKey.publicAsSshString() + "\n");
+};
