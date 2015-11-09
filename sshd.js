@@ -298,7 +298,7 @@ var Server = exports.Server = function (options) {
      *                  (e.g. "ssh-rsa AAAAABBBBCCC= optional-id")
      * @returns Policy instance, or Policy promise, or undefined
      */
-     self.findPolicy  = function (username, key) {};
+     self.findPolicy  = function (username, publickey) {};
 
     /**
      * Provide a shim to a mock internal node as a pseudo-socket.
