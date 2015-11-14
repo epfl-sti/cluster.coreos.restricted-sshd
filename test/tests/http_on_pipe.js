@@ -216,7 +216,7 @@ describe("http_on_pipe", function () {
                 assert.equal(tracedError.message, "EPIPE");
             }, done));
     });
-    it("deals with errors thrown in the handler", function (done) {
+    it("deals with errors thrown in the handler at top level", function (done) {
         function buggyServe(req, res) {
             throw new Error("OOPS");
         }
@@ -228,4 +228,28 @@ describe("http_on_pipe", function () {
                 assert.equal(err.message, "OOPS");
             }, done));
     });
+
+    var express;
+    try {
+        express = require("express");
+    } catch (err) {
+        console.log("Express is unavailable, some tests will be skipped");
+    }
+    if (express) {
+        it("deals with errors thrown in a route", function (done) {
+            var app = new express();
+            app.get("/zoinx", function () {
+                throw new Error("OOPS");
+            });
+            var src = makeStringSource("GET /zoinx HTTP/1.1\r\n" +
+                "Host: zoinx.org\r\n\r\n");
+            var sink = makeStringSink();
+            http_on_pipe(src, sink, app,
+                checkThenDone(function (err) {
+                    assert(!err);
+                    assert(sink.buf.match(/HTTP\/1[.]. 500/));
+                    assert(sink.buf.match(/OOPS/));
+                }, done));
+        });
+    }
 });

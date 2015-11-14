@@ -4,7 +4,7 @@
   "description": " Restricted server for `fleetctl --tunnel`, with configurable access control ",
   "main": "app.js",
   "scripts": {
-    "test_local": "echo test", 
+    "test_local": "echo test",
     "test": "mocha -R spec ./test/tests/"
   },
   "repository": {
@@ -30,6 +30,7 @@
     "docoptmd": "^0.1.2",
     "express": "^4.13.3",
     "express-json": "^1.0.0",
+    "finalhandler": "^0.4.0",
     "merge": "^1.2.0",
     "pty.js": "^0.3.0",
     "q": "^1.4.1",

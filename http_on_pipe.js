@@ -7,18 +7,20 @@ var assert = require("assert"),
     EventEmitter = require('events').EventEmitter,
     Transform = require('stream').Transform,
     Writable = require('stream').Writable,
-// Using node's private API here – This saves us so much work that
+    // Using node's private API here – This saves us so much work that
     // I'm not even ashamed.
     connectionListener = require('_http_server')._connectionListener,
     ServerResponse = require('_http_server').ServerResponse,
-    debug = require("debug")("http_on_pipe");
+    debug = require("debug")("http_on_pipe"),
+    finalhandler = require("finalhandler");
 
 /**
  * Main entry point.
  * @param stdin
  * @param stdout
- * @param {handler} handler Handler function, HTTP-style
- *                  (takes req and res, eventually calls res.end())
+ * @param {handler} handler Handler function, Connct-style
+ *                  (takes req, res and next; eventually calls either res.end()
+ *                  or next)
  * @param {Function} done Called when it's time to close shop
  */
 module.exports = function (stdin, stdout, handler, done) {
@@ -44,7 +46,8 @@ module.exports = function (stdin, stdout, handler, done) {
                     consumed(e);
                 }
             });
-        handler(req, res);
+        // Use three-argument handler form to accomodate a Connect-style handler
+        handler(req, res, finalhandler(req, res));
     };
     requestSink.on("error", callDone);
 

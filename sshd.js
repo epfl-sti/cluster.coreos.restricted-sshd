@@ -84,14 +84,20 @@ var Policy = exports.Policy = function (id) {
         stream.on("close", close);
 
         http_on_pipe(stream.stdin, stream.stdout,
-            function(req, res) { self.fleetAPI(req, res); },
+            // self.fleetAPI.bind(self.fleetAPI),
+            function(req, res, next) {
+                self.fleetAPI(req, res, function(err) {
+                    next(err);
+                });
+            },
             close);
     };
 
     /**
      * The connect or express app to handle the requests to fleetd.
      *
-     * The default app is 404-compliant. You probably want to replace it.
+     * The default app is 404-compliant. You probably want to feed it
+     * a few routes, or replace it altogether.
      *
      * @type {Function}
      */
