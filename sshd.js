@@ -73,7 +73,7 @@ var Policy = exports.Policy = function (id) {
      * This is invoked by {@link Server} when it sees an attempt to execute
      * the "fleetctl fd-forward" command. A typical policy will want to
      * intercept this, and control queries and commands sent this way. Rather
-     * than overriding handleFleetStream, see {@link fleetAPI}.
+     * than overriding handleFleetStream though, see {@link fleetAPI}.
      *
      * @param stream
      */
