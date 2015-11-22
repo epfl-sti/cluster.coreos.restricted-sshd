@@ -4,8 +4,10 @@
 
 var assert = require('assert'),
     crypto = require('crypto'),
+    EventEmitter = require('events').EventEmitter,
     express = require('express'),
     express_json = require('express-json'),
+    inherits = require("util").inherits,
     inspect = require('util').inspect,
     debugOrig = require('debug')('sshd'),
     debugSshd = require('debug')('sshd_ssh2'),
@@ -13,7 +15,7 @@ var assert = require('assert'),
     ptySpawn = require("pty.js").spawn,
     Q = require("q"),
     ssh2 = require('ssh2'),
-    utils = ssh2.utils,
+    genPublicKey = ssh2.utils.genPublicKey,
     http_on_pipe = require("./http_on_pipe");
 
 function debug(/* hints..., msg */) {
@@ -47,6 +49,7 @@ function debug(/* hints..., msg */) {
  */
 var Policy = exports.Policy = function (id) {
     var self = this;
+    EventEmitter.call(this);
 
     /**
      * A moniker for debug messages.
@@ -196,26 +199,15 @@ var Policy = exports.Policy = function (id) {
             debug("stream finish!");
         });
     };
-
-    self.handleShell = function (pty, stream) {
-        stream.write("Connected to /bin/bash.\n");
-        stream.write("TODO: should rather ssh somewhere and docker run /bin/sh\n");
-        self.runPtyCommand(pty, stream, '/bin/bash', []);
-    };
-
-    self.handleExec = function (pty, stream, command) {
-        stream.write("Connected to /bin/bash.\n");
-        stream.write("TODO: should rather run \"" + inspect(command) + "\"\n");
-        self.runPtyCommand(pty, stream, '/bin/bash', []);
-    };
 };
+inherits(Policy, EventEmitter);
 
 function asPemKey(contextKey) {
     var matched = contextKey.algo.match("ssh-(...)");
     if (! matched) {
         throw new Error("Weird algo: " + contextKey.algo);
     }
-    return utils.genPublicKey({type: matched[1],
+    return genPublicKey({type: matched[1],
         public: contextKey.data}).publicOrig;
 }
 
@@ -252,16 +244,39 @@ var Server = exports.Server = function (options) {
                 debug(client, 'requests a session');
 
                 var session = accept();
+                var pty = new Pty();
+                session.once("pty", function (accept, reject, info) {
+                    debug(client, 'wants a pty on the gateway');
+                    pty.setup(info);
+                    accept && accept();
+                    debug(client, "pty accepted, term=" + info.term);
+                });
+                session.once('shell', function (accept, reject, info) {
+                    debug(client, 'wants a shell on the gateway');
+                    if (! pty) {
+                        debug(client, "refusing to start gateway shell without a pty");
+                        reject();
+                    } else if (client.policy.listeners("shell-gateway").length) {
+                        client.policy.emit("shell-gateway", pty, accept, reject, info);
+                    } else {
+                        debug("policy unwilling to grant shell-gateway");
+                        reject();
+                    }
+                });
                 session.once('exec', function (accept, reject, info) {
-                    debug(client, 'wants to execute: ' + inspect(info.command));
+                    debug(client, 'wants to execute on gateway: ' + inspect(info.command));
                     if (info.command.indexOf("fleetctl fd-forward") > -1 &&
                         info.command.indexOf("fleet.sock") > -1) {
                         debug(client, "routing execute to emulated fleetd");
                         var stream = accept();
                         client.policy.handleFleetStream(stream);
+                    } else if (! pty) {
+                        debug(client, "refusing custom command on gateway without a pty");
+                        reject();
+                    } else if (client.policy.listeners("exec-gateway").length) {
+                        client.policy.emit("exec-gateway", pty, accept, reject, info);
                     } else {
-                        debug(client, "Unhandled command: " +
-                            inspect(info.command));
+                        debug("policy unwilling to grant exec-gateway");
                         reject();
                     }
                 });
@@ -350,29 +365,33 @@ var Server = exports.Server = function (options) {
                     var session = accept();
                     // Need to remember the pty details in between callbacks;
                     // see examples/server-chat.js in the ssh2 sources
-                    var pty = {};
+                    var pty = new Pty();
                     session.once("pty", function (accept, reject, info) {
-                        pty.rows = info.rows;
-                        pty.cols = info.cols;
-                        pty.term = info.term;
+                        pty.setup(info);
                         accept && accept();
                         debug(client, "pty accepted, term=" + info.term);
                     });
                     session.once('shell', function (accept, reject, info) {
                         debug(client, 'wants a shell');
-                        if (pty) {
-                            policy.handleShell(pty, accept());
-                        } else {
+                        if (! pty) {
                             debug(client, "refusing to start shell without a pty");
+                            reject();
+                        } else if (policy.listeners("shell-internal").length) {
+                            policy.emit("shell-internal", pty, accept, reject, info);
+                        } else {
+                            debug("policy unwilling to grant shell-internal");
                             reject();
                         }
                     });
                     session.once('exec', function (accept, reject, info) {
                         debug(client, 'wants to execute: ' + inspect(info.command));
-                        if (pty) {
-                            policy.handleExec(pty, accept(), info.command);
-                        } else {
+                        if (! pty) {
                             debug(client, "refusing to exec without a pty");
+                            reject();
+                        } else if (policy.listeners("exec-internal").length) {
+                            policy.emit("exec-internal", pty, accept, reject, info);
+                        } else {
+                            debug("policy unwilling to grant exec-internal");
                             reject();
                         }
                     });
@@ -514,6 +533,21 @@ Authenticator.prototype.getDebugLabel = function() {
     } else {
         return label;
     }
+};
+
+/**
+ * Instances represent a pty allocated for a command.
+ *
+ * @constructor
+ */
+var Pty = function () {
+
+};
+
+Pty.prototype.setup = function (info) {
+    this.rows = info.rows;
+    this.cols = info.cols;
+    this.term = info.term;
 };
 
 /**

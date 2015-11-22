@@ -3,6 +3,7 @@
  */
 
 var assert = require("assert"),
+    inspect = require("util").inspect,
     debug = require("debug")("policy.js"),
     util = require("util"),
     request = require("request"),
@@ -34,6 +35,42 @@ var FilteringPolicy = exports.FilteringPolicy =
                 res.json(proxyRes.body);
             }).catch(next);
         });
+
+        /**
+         * Called when the user requests a shell on a (fake) internal node.
+         *
+         * This is what "fleetctl ssh" does when invoked without a command.
+         *
+         * @param pty A pty object from sshd.js
+         * @param accept Accept callback provided by the ssh.js framework
+         * @param accept Reject callback provided by the ssh.js framework
+         * @param info Reject callback provided by the ssh.js framework
+          */
+        function onShellInternal(pty, accept, reject, info) {
+            var stream = accept();
+            stream.write("Connected to /bin/bash.\n");
+            stream.write("TODO: should rather ssh somewhere and docker run /bin/sh\n");
+            self.runPtyCommand(pty, stream, '/bin/bash', []);
+        }
+        self.on("shell-internal", onShellInternal);
+
+        /**
+         * Called when asked to execute a command on a (fake) internal node.
+         *
+         * This is what "fleetctl ssh" does when invoked with a trailing command.
+         *
+         * @param pty A pty object from sshd.js
+         * @param accept Accept callback provided by the ssh.js framework
+         * @param accept Reject callback provided by the ssh.js framework
+         * @param info Reject callback provided by the ssh.js framework
+         */
+        function onExecInternal(pty, accept, reject, info) {
+            var stream = accept();
+            stream.write("Connected to /bin/bash.\n");
+            stream.write("TODO: should rather run \"" + inspect(info.command) + "\"\n");
+            self.runPtyCommand(pty, stream, '/bin/bash', []);
+        }
+        self.on("exec-internal", onExecInternal);
     };
 
 util.inherits(FilteringPolicy, BasePolicy);

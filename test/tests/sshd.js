@@ -40,9 +40,10 @@ describe('sshd end-to-end test', function () {
         if (! hasAccess.equals(pubkey)) return;
         var policy = new FilteringPolicy("test pubkey",
             fakeFleetd.socketPath);
-        policy.handleExec = function (pty, stream, command) {
-            this.runPtyCommand(pty, stream, "bash", ["-c", command]);
-        };
+        policy.removeAllListeners("exec-internal");
+        policy.on("exec-internal", function (pty, accept, reject, info) {
+            this.runPtyCommand(pty, accept(), "bash", ["-c", info.command]);
+        });
         policy.isUnitAllowed = function (unitName) {
             return (unitName === "stiitops.prometheus.service");
         };
