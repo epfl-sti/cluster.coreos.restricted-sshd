@@ -42,7 +42,7 @@ describe('sshd end-to-end test', function () {
             fakeFleetd.socketPath);
         policy.removeAllListeners("exec-internal");
         policy.on("exec-internal", function (pty, accept, reject, info) {
-            this.runPtyCommand(pty, accept(), "bash", ["-c", info.command]);
+            pty.spawn(accept(), "bash", ["-c", info.command]);
         });
         policy.isUnitAllowed = function (unitName) {
             return (unitName === "stiitops.prometheus.service");

@@ -50,7 +50,7 @@ var FilteringPolicy = exports.FilteringPolicy =
             var stream = accept();
             stream.write("Connected to /bin/bash.\n");
             stream.write("TODO: should rather ssh somewhere and docker run /bin/sh\n");
-            self.runPtyCommand(pty, stream, '/bin/bash', []);
+            pty.spawn(stream, '/bin/bash', []);
         }
         self.on("shell-internal", onShellInternal);
 
@@ -68,7 +68,7 @@ var FilteringPolicy = exports.FilteringPolicy =
             var stream = accept();
             stream.write("Connected to /bin/bash.\n");
             stream.write("TODO: should rather run \"" + inspect(info.command) + "\"\n");
-            self.runPtyCommand(pty, stream, '/bin/bash', []);
+            pty.spawn(stream, '/bin/bash', []);
         }
         self.on("exec-internal", onExecInternal);
     };

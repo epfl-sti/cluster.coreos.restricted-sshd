@@ -124,81 +124,6 @@ var Policy = exports.Policy = function (id) {
     self.handleTCPForward = function (client, channel) {
         self.server.masqueradeSSH(client.policy, channel);
     };
-
-    self.runPtyCommand = function(pty, stream, command, args) {
-        var cmd = ptySpawn(command, args, {
-            name: pty.term,
-            cols: pty.cols,
-            rows: pty.rows,
-            cwd: "/",
-            env: merge(process.env, {TERM: pty.term})
-        });
-        stream.pipe(cmd);
-        // Instead of a pipe, propagate data only
-        // This gives us the time to propagate exit status in case
-        // stdout close is detected before child exit
-        cmd.on("data", function (data) {
-            stream.write(data);
-        });
-
-        var exited = Q.defer(),
-            cmdStdinClosed = Q.defer(),
-            cmdStdoutClosed = Q.defer();
-
-        Q.all([exited.promise, cmdStdinClosed.promise, cmdStdoutClosed.promise])
-            .then(function (results) {
-                var exitCode = results[0][0];
-                var signal = results[0][1];
-                debug("cmd is all done: exitCode=" + exitCode +
-                    ", signal=" + signal);
-                var exitRet = stream.exit(signal || exitCode);
-                debug("exitRet = " + exitRet);
-                stream.end();
-            });
-        var allDone = Q.all([]);
-        cmd.on("exit", function (exitCode, signal) {
-            debug("Command exited with exit code " + exitCode + ", signal " + signal);
-            if (! signal) {
-                exited.resolve([exitCode, undefined]);
-            } else {
-                // Since pty doesn't respect the node convention for signals
-                // either, we need to translate back.
-                // Assume Linux signal numbering (server will typically run
-                // on Linux)
-                var signalName = {
-                    1: 'SIGHUP',
-                    9: 'SIGKILL'
-                };
-                if (signal + 0 === signal) {
-                    signal = signalName[signal] || ("SIG" + signal);
-                }
-            }
-            exited.resolve([null, signal]);
-        });
-        cmd.on("end", function () {
-            debug("cmd end!");
-            cmdStdinClosed.resolve();
-        });
-        cmd.on("finish", function () {
-            debug("cmd finish!");
-            cmdStdoutClosed.resolve();
-        });
-
-        cmd.on("error", function (err) {
-            // TODO: How to recover orderly here?
-            debug(err);
-        });
-        stream.on("error", function (err) {
-            // TODO: How to recover orderly here?
-            debug(err);
-        });
-        stream.on("end", function () {
-            debug("stream end!");
-        });
-        stream.on("finish", function () {
-            debug("stream finish!");
-        });
-    };
 };
 inherits(Policy, EventEmitter);
 
@@ -548,6 +473,82 @@ Pty.prototype.setup = function (info) {
     this.rows = info.rows;
     this.cols = info.cols;
     this.term = info.term;
+};
+
+Pty.prototype.spawn = function(stream, command, args) {
+    var self = this;
+    var cmd = ptySpawn(command, args, {
+        name: self.term,
+        cols: self.cols,
+        rows: self.rows,
+        cwd: "/",
+        env: merge(process.env, {TERM: self.term})
+    });
+    stream.pipe(cmd);
+    // Instead of a pipe, propagate data only
+    // This gives us the time to propagate exit status in case
+    // stdout close is detected before child exit
+    cmd.on("data", function (data) {
+        stream.write(data);
+    });
+
+    var exited = Q.defer(),
+        cmdStdinClosed = Q.defer(),
+        cmdStdoutClosed = Q.defer();
+
+    Q.all([exited.promise, cmdStdinClosed.promise, cmdStdoutClosed.promise])
+        .then(function (results) {
+            var exitCode = results[0][0];
+            var signal = results[0][1];
+            debug("cmd is all done: exitCode=" + exitCode +
+                ", signal=" + signal);
+            var exitRet = stream.exit(signal || exitCode);
+            debug("exitRet = " + exitRet);
+            stream.end();
+        });
+    var allDone = Q.all([]);
+    cmd.on("exit", function (exitCode, signal) {
+        debug("Command exited with exit code " + exitCode + ", signal " + signal);
+        if (! signal) {
+            exited.resolve([exitCode, undefined]);
+        } else {
+            // Since pty doesn't respect the node convention for signals
+            // either, we need to translate back.
+            // Assume Linux signal numbering (server will typically run
+            // on Linux)
+            var signalName = {
+                1: 'SIGHUP',
+                9: 'SIGKILL'
+            };
+            if (signal + 0 === signal) {
+                signal = signalName[signal] || ("SIG" + signal);
+            }
+        }
+        exited.resolve([null, signal]);
+    });
+    cmd.on("end", function () {
+        debug("cmd end!");
+        cmdStdinClosed.resolve();
+    });
+    cmd.on("finish", function () {
+        debug("cmd finish!");
+        cmdStdoutClosed.resolve();
+    });
+
+    cmd.on("error", function (err) {
+        // TODO: How to recover orderly here?
+        debug(err);
+    });
+    stream.on("error", function (err) {
+        // TODO: How to recover orderly here?
+        debug(err);
+    });
+    stream.on("end", function () {
+        debug("stream end!");
+    });
+    stream.on("finish", function () {
+        debug("stream finish!");
+    });
 };
 
 /**
