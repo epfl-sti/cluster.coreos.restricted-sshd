@@ -22,6 +22,11 @@ try {
 }
 
 describe('sshd end-to-end test', function () {
+    /* Attempt to use the real fleetctl command through the restricted sshd
+     *
+     * All test commands (such as "echo hello", "exit 42") are actually run
+     * locally (see policy.on("exec-internal") below)
+     */
     if (! fleetctl) return;
 
     var fakeUserKey = new testKeys.UserKey();
@@ -42,6 +47,7 @@ describe('sshd end-to-end test', function () {
             fakeFleetd.socketPath);
         policy.removeAllListeners("exec-internal");
         policy.on("exec-internal", function (pty, accept, reject, info) {
+            debug("Running command: ", info.command);
             pty.spawn(accept(), "bash", ["-c", info.command]);
         });
         policy.isUnitAllowed = function (unitName) {
